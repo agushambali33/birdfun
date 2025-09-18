@@ -120,7 +120,7 @@ async function connectWallet() {
     await window.ethereum.request({ method: 'eth_requestAccounts' });
 
     provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
-    signer = provider.getSigner();
+    signer = await provider.getSigner();
     contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
     playerAddress = await signer.getAddress();
@@ -141,21 +141,20 @@ async function connectWallet() {
 }
 
 function submitScoreToBlockchain(score) {
-  if (!contract || !isWalletConnected) return;
+  if (!provider || !isWalletConnected) return;
   if (score <= 0) return;
   (async () => {
     try {
+      signer = await provider.getSigner();
+      contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
       showToast('Submitting score...', 'loading');
       const tx = await contract.submitPoints(score, { gasLimit: 300000 });
-      tx.wait().then(async () => {
-        try { playerPoints = await contract.playerPoints(playerAddress); } catch {}
-        try { rewardPreview = await contract.getRewardPreview(playerAddress); } catch {}
-        toggleWeb3UI();
-        showToast(`Score ${score} submitted`, 'success');
-      }).catch(err => {
-        console.error('submit wait error', err);
-        showToast('Submit failed', 'error');
-      });
+      await tx.wait();
+      playerPoints = await contract.playerPoints(playerAddress).catch(() => ethers.BigNumber.from(0));
+      rewardPreview = await contract.getRewardPreview(playerAddress).catch(() => ethers.BigNumber.from(0));
+      toggleWeb3UI();
+      showToast(`Score ${score} submitted`, 'success');
     } catch (err) {
       console.error('submitScore error', err);
       showToast(err?.message || 'Submit failed', 'error');
@@ -164,24 +163,23 @@ function submitScoreToBlockchain(score) {
 }
 
 function redeemPoints() {
-  if (!contract || !isWalletConnected) return;
+  if (!provider || !isWalletConnected) return;
   if (bnToNumberSafe(playerPoints) <= 0) {
     showToast('No points to claim', 'warning');
     return;
   }
   (async () => {
     try {
+      signer = await provider.getSigner();
+      contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
       showToast('Claiming...', 'loading');
       const tx = await contract.redeem({ gasLimit: 300000 });
-      tx.wait().then(async () => {
-        try { playerPoints = await contract.playerPoints(playerAddress); } catch {}
-        try { rewardPreview = await contract.getRewardPreview(playerAddress); } catch {}
-        toggleWeb3UI();
-        showToast('Claimed!', 'success');
-      }).catch(err => {
-        console.error('claim wait error', err);
-        showToast('Claim failed', 'error');
-      });
+      await tx.wait();
+      playerPoints = await contract.playerPoints(playerAddress).catch(() => ethers.BigNumber.from(0));
+      rewardPreview = await contract.getRewardPreview(playerAddress).catch(() => ethers.BigNumber.from(0));
+      toggleWeb3UI();
+      showToast('Claimed!', 'success');
     } catch (err) {
       console.error('redeem error', err);
       showToast(err?.message || 'Claim failed', 'error');
