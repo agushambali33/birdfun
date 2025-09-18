@@ -4,83 +4,33 @@
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="X-UA-Compatible" content="ie=edge" />
-  <meta name="theme-color" content="#0d1117">
+  <meta name="theme-color" content="#272b30">
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=0">
-
-  <title>FlappyBird Web3</title>
-  <meta name="description" content="Play FlappyBird Web3 — tap to fly, earn points, and redeem blockchain rewards. 🚀">
-
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="./assets/favicon.png" />
-
-  <!-- Bootstrap (optional, for responsive footer) -->
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
-    crossorigin="anonymous">
-
-  <style>
-    body {
-      background: linear-gradient(135deg, #0d1117, #161b22);
-      color: #fff;
-      font-family: 'Inter', sans-serif;
-      margin: 0;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-
-    #Game {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      margin-top: 40px;
-    }
-
-    footer {
-      margin: 20px 0;
-      font-size: 14px;
-      text-align: center;
-      color: #bbb;
-    }
-
-    footer a {
-      color: #58a6ff;
-      text-decoration: none;
-      transition: color 0.2s ease;
-    }
-
-    footer a:hover {
-      color: #1f6feb;
-    }
-
-    footer img {
-      vertical-align: middle;
-      margin-right: 6px;
-    }
-  </style>
+    integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+  <title>FlappyBird</title>
+  <meta name="google-site-verification" content="UoRb1chXxdu0BzKwtt0PneXVdCATq4u6d_mvn3gosC8" />
 </head>
 
 <body>
   <div class="container">
-    <div class="row">
-      <div id="Game" class="col-sm-12"></div>
+    <div class='row'>
+      <div id="Game" class='col-sm-12 d-flex justify-content-center mt-5'></div>
     </div>
-
-    <!-- Footer (credits) -->
-    <footer>
-      <p>
-        <img src="./assets/GitHub-Mark-Light-32px.png" alt="GitHub" />
-        <a href="https://github.com/agushambali33/flappyhelios" target="_blank">GitHub Repository</a>
-      </p>
-      <p>
-        <a href="https://www.buymeacoffee.com/barzinassa" target="_blank">
-          <img src="./assets/bmc-button.png" width="150" alt="Buy Me a Coffee">
-        </a>
-      </p>
-    </footer>
+    <div class='row mt-2'>
+      <div class='col-sm-12'>
+        <p class='text-center'>
+          <img src='./assets/GitHub-Mark-Light-32px.png' />
+          <a class='small text-white' href='https://github.com/barzin144/FlappyBird' target='_blank'>Github repository</a>
+        </p>
+        <p class="text-center">
+          <a href="https://www.buymeacoffee.com/barzinassa" target="_blank">
+          <img src="./assets/bmc-button.png" width="150px"/> 
+          </a>
+        </p>
+      </div>
+    </div>
   </div>
-
-  <!-- Game Script -->
-  <script src="./index.js" type="module"></script>
 </body>
+
 </html>
