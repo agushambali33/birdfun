@@ -41,10 +41,10 @@ let playerPoints = 0;
 let playerAddress = null;
 let rewardPreview = 0;
 
-// DOM elements - Compact UI
+// DOM elements
 let connectToggle, pointsBadge, rewardBadge, claimToggle;
 
-// Web3 functions - Unchanged
+// ========================= WEB3 FUNCTIONS =========================
 const connectWallet = async () => {
     console.log('🔄 Starting wallet connection...');
     
@@ -94,7 +94,7 @@ const submitScoreToBlockchain = async (score) => {
         showToast('Submitting score...', 'loading');
         
         const tx = await contract.submitPoints(score, { gasLimit: 300000 });
-        const receipt = await tx.wait();
+        await tx.wait();
         
         playerPoints = await contract.playerPoints(playerAddress);
         rewardPreview = await contract.getRewardPreview(playerAddress);
@@ -124,7 +124,7 @@ const redeemPoints = async () => {
     try {
         showToast('Claiming tokens...', 'loading');
         const tx = await contract.redeem({ gasLimit: 300000 });
-        const receipt = await tx.wait();
+        await tx.wait();
         
         const tokens = (playerPoints / 10).toFixed(2);
         playerPoints = 0;
@@ -144,7 +144,7 @@ const redeemPoints = async () => {
     }
 };
 
-// Compact UI Toggle
+// ========================= UI FUNCTIONS =========================
 const toggleWeb3UI = () => {
     // Connect toggle
     if (connectToggle) {
@@ -179,11 +179,11 @@ const toggleWeb3UI = () => {
     }
 };
 
-// Compact UI Creation
+// Redesigned UI
 const createCompactUI = () => {
-    console.log('🎨 Creating compact UI...');
+    console.log('🎨 Creating game-style UI...');
     
-    // 1. TOP-LEFT: Connect Toggle (Always Visible)
+    // === CONNECT WALLET (TOP LEFT) ===
     connectToggle = document.createElement('button');
     connectToggle.className = 'toggle';
     connectToggle.innerHTML = '🔗 Connect';
@@ -191,131 +191,107 @@ const createCompactUI = () => {
         position: fixed;
         top: 15px;
         left: 15px;
-        width: 80px;
-        height: 32px;
-        border-radius: 16px;
+        width: 110px;
+        height: 36px;
+        border-radius: 18px;
         border: none;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        font-size: 11px;
-        font-weight: 600;
+        font-family: 'FlappyBirdy', sans-serif;
+        font-size: 14px;
+        font-weight: bold;
         cursor: pointer;
         z-index: 1001;
-        box-shadow: 0 2px 10px rgba(102, 126, 234, 0.3);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        letter-spacing: 0.5px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        backdrop-filter: blur(10px);
+        box-shadow: 0 3px 10px rgba(102, 126, 234, 0.4);
+        transition: all 0.2s ease-in-out;
     `;
     connectToggle.onclick = connectWallet;
     document.body.appendChild(connectToggle);
     
-    // 2. TOP-RIGHT: Points & Reward Badges (Compact)
+    // === RIGHT TOP STACK ===
     const badgeContainer = document.createElement('div');
     badgeContainer.style.cssText = `
         position: fixed;
         top: 15px;
         right: 15px;
         display: flex;
+        flex-direction: column;
+        align-items: flex-end;
         gap: 8px;
         z-index: 1001;
     `;
     document.body.appendChild(badgeContainer);
-    
-    // Points Badge
+
+    // POINT BADGE
     pointsBadge = document.createElement('div');
     pointsBadge.className = 'badge';
     pointsBadge.innerHTML = '0';
     pointsBadge.style.cssText = `
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
+        min-width: 70px;
+        padding: 6px 10px;
+        border-radius: 14px;
         background: rgba(76, 175, 80, 0.2);
         border: 1px solid rgba(76, 175, 80, 0.4);
         color: #4CAF50;
-        font-size: 12px;
+        font-family: 'FlappyBirdy', sans-serif;
+        font-size: 15px;
         font-weight: bold;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 2px 8px rgba(76, 175, 80, 0.2);
-        transition: all 0.3s ease;
-        backdrop-filter: blur(10px);
+        text-align: center;
+        box-shadow: 0 2px 6px rgba(76, 175, 80, 0.25);
     `;
     badgeContainer.appendChild(pointsBadge);
-    
-    // Reward Badge
+
+    // TOKEN BADGE
     rewardBadge = document.createElement('div');
     rewardBadge.className = 'badge reward';
     rewardBadge.innerHTML = '💎 0.00';
     rewardBadge.style.cssText = `
-        width: 52px;
-        height: 36px;
-        border-radius: 18px;
+        min-width: 80px;
+        padding: 6px 12px;
+        border-radius: 14px;
         background: rgba(255, 215, 0, 0.15);
         border: 1px solid rgba(255, 215, 0, 0.3);
         color: #FFD700;
-        font-size: 10px;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 2px 8px rgba(255, 215, 0, 0.2);
-        transition: all 0.3s ease;
-        backdrop-filter: blur(10px);
-        letter-spacing: -0.5px;
+        font-family: 'FlappyBirdy', sans-serif;
+        font-size: 14px;
+        font-weight: bold;
+        text-align: center;
+        box-shadow: 0 2px 6px rgba(255, 215, 0, 0.25);
     `;
     badgeContainer.appendChild(rewardBadge);
-    
-    // 3. BOTTOM-RIGHT: Claim Toggle (Hidden until points)
+
+    // CLAIM BUTTON
     claimToggle = document.createElement('button');
     claimToggle.className = 'toggle claim disabled';
     claimToggle.innerHTML = '⚡ Locked';
     claimToggle.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        width: 72px;
-        height: 32px;
-        border-radius: 16px;
+        margin-top: 6px;
+        width: 100px;
+        height: 36px;
+        border-radius: 18px;
         border: none;
         background: rgba(158, 158, 158, 0.3);
         color: #9E9E9E;
-        font-size: 10px;
-        font-weight: 600;
+        font-family: 'FlappyBirdy', sans-serif;
+        font-size: 14px;
+        font-weight: bold;
         cursor: not-allowed;
-        z-index: 1000;
-        box-shadow: 0 2px 8px rgba(158, 158, 158, 0.2);
-        transition: all 0.3s ease;
-        letter-spacing: 0.5px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        opacity: 0;
-        transform: translateY(10px);
-        backdrop-filter: blur(10px);
+        box-shadow: 0 2px 6px rgba(158, 158, 158, 0.25);
+        transition: all 0.2s ease;
+        text-align: center;
     `;
     claimToggle.onclick = redeemPoints;
-    document.body.appendChild(claimToggle);
-    
-    // Add global styles
+    badgeContainer.appendChild(claimToggle);
+
     addCompactStyles();
-    
-    // Initial state
     toggleWeb3UI();
-    console.log('✅ Compact UI ready');
+    console.log('✅ Game-style UI ready');
 };
 
-// Compact UI Styles
+// ========================= STYLES =========================
 const addCompactStyles = () => {
     const style = document.createElement('style');
     style.textContent = `
-        .toggle {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        
         .toggle.connected {
             background: linear-gradient(135deg, #4CAF50, #45a049) !important;
             box-shadow: 0 3px 12px rgba(76, 175, 80, 0.4) !important;
@@ -323,31 +299,25 @@ const addCompactStyles = () => {
         }
         
         .toggle:hover:not(.disabled) {
-            transform: translateY(-1px) scale(1.02);
-            box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4) !important;
+            transform: translateY(-2px) scale(1.05);
+            box-shadow: 0 4px 16px rgba(102, 126, 234, 0.5) !important;
         }
-        
-        .badge {
-            transition: all 0.3s ease;
-        }
-        
+
         .badge.active {
             background: rgba(76, 175, 80, 0.4) !important;
             border-color: #4CAF50 !important;
-            box-shadow: 0 3px 12px rgba(76, 175, 80, 0.3) !important;
-            transform: scale(1.1);
+            transform: scale(1.05);
         }
         
         .badge.reward.active {
             background: rgba(255, 215, 0, 0.3) !important;
             border-color: #FFD700 !important;
-            box-shadow: 0 0 12px rgba(255, 215, 0, 0.4) !important;
-            animation: rewardGlow 1.5s ease-in-out infinite alternate;
+            animation: rewardGlow 1.2s ease-in-out infinite alternate;
         }
         
         @keyframes rewardGlow {
-            0% { box-shadow: 0 0 8px rgba(255, 215, 0, 0.4); }
-            100% { box-shadow: 0 0 16px rgba(255, 215, 0, 0.6); }
+            0% { box-shadow: 0 0 6px rgba(255, 215, 0, 0.4); }
+            100% { box-shadow: 0 0 14px rgba(255, 215, 0, 0.7); }
         }
         
         .toggle.claim.active {
@@ -355,122 +325,66 @@ const addCompactStyles = () => {
             color: white !important;
             cursor: pointer !important;
             box-shadow: 0 3px 12px rgba(33, 150, 243, 0.4) !important;
-            opacity: 1 !important;
-            transform: translateY(0) scale(1);
         }
         
         .toggle.claim.active:hover {
-            transform: translateY(-2px) scale(1.02);
-            box-shadow: 0 5px 20px rgba(33, 150, 243, 0.5) !important;
+            transform: translateY(-2px) scale(1.05);
+            box-shadow: 0 5px 18px rgba(33, 150, 243, 0.6) !important;
         }
-        
-        .toggle.claim.disabled {
-            background: rgba(158, 158, 158, 0.2) !important;
-            color: #9E9E9E !important;
-            cursor: not-allowed !important;
-        }
-        
-        /* Toast notifications - Compact */
-        .toast {
-            position: fixed;
-            top: 80px;
-            right: 15px;
-            background: rgba(0, 0, 0, 0.9);
-            backdrop-filter: blur(10px);
-            border-radius: 12px;
-            padding: 8px 12px;
-            font-size: 11px;
-            font-weight: 500;
-            z-index: 1002;
-            min-width: 140px;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-            border-left: 3px solid;
-            opacity: 0;
-            transform: translateX(100%);
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        
-        .toast.show {
-            opacity: 1;
-            transform: translateX(0);
-        }
-        
-        .toast.success { border-left-color: #4CAF50; color: #4CAF50; }
-        .toast.error { border-left-color: #f44336; color: #f44336; }
-        .toast.warning { border-left-color: #ff9800; color: #ff9800; }
-        .toast.loading { border-left-color: #9E9E9E; color: #9E9E9E; }
-        
-        .toast .icon { font-size: 12px; min-width: 12px; }
     `;
     document.head.appendChild(style);
 };
 
-// Toast notifications - Compact
+// ========================= TOAST =========================
 const showToast = (message, type = 'info') => {
     const existingToast = document.querySelector('.toast');
     if (existingToast) existingToast.remove();
     
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    toast.innerHTML = `
-        <span class="icon">${getToastIcon(type)}</span>
-        <span>${message}</span>
-    `;
+    toast.innerHTML = `<span>${message}</span>`;
+    
+    Object.assign(toast.style, {
+        position: 'fixed',
+        top: '70px',
+        right: '20px',
+        background: 'rgba(0,0,0,0.85)',
+        color: '#fff',
+        fontFamily: 'FlappyBirdy, sans-serif',
+        fontSize: '14px',
+        padding: '8px 14px',
+        borderRadius: '12px',
+        zIndex: 1002,
+        opacity: 0,
+        transform: 'translateX(100%)',
+        transition: 'all 0.3s ease'
+    });
     
     document.body.appendChild(toast);
-    
-    // Animate in
-    setTimeout(() => toast.classList.add('show'), 10);
-    
-    // Auto remove
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 300);
-    }, 2500);
+    setTimeout(() => { toast.style.opacity = 1; toast.style.transform = 'translateX(0)'; }, 10);
+    setTimeout(() => { toast.style.opacity = 0; toast.style.transform = 'translateX(100%)'; setTimeout(() => toast.remove(), 300); }, 2200);
 };
 
-const getToastIcon = (type) => {
-    const icons = { 
-        success: '✅', 
-        error: '❌', 
-        warning: '⚠️', 
-        loading: '⏳' 
-    };
-    return icons[type] || 'ℹ️';
-};
-
-// Animations
+// ========================= ANIMATIONS =========================
 const animateConnectSuccess = () => {
     if (connectToggle) {
-        connectToggle.style.transform = 'scale(0.95)';
+        connectToggle.style.transform = 'scale(0.9)';
         setTimeout(() => connectToggle.style.transform = 'scale(1)', 150);
     }
 };
-
-const animateScorePulse = (element, score) => {
+const animateScorePulse = (element) => {
     if (!element) return;
     element.style.transform = 'scale(1.3)';
-    element.style.color = '#FFD700';
-    setTimeout(() => {
-        element.style.transform = 'scale(1)';
-        element.style.color = '#4CAF50';
-    }, 200);
+    setTimeout(() => element.style.transform = 'scale(1)', 200);
 };
-
 const animateClaimSuccess = () => {
     if (pointsBadge) {
         pointsBadge.style.transform = 'scale(0.8)';
-        pointsBadge.style.background = 'rgba(255, 215, 0, 0.3)';
-        setTimeout(() => {
-            pointsBadge.style.transform = 'scale(1)';
-            pointsBadge.style.background = 'rgba(76, 175, 80, 0.2)';
-        }, 200);
+        setTimeout(() => pointsBadge.style.transform = 'scale(1)', 200);
     }
 };
 
+// ========================= GAME LOOP =========================
 const sketch = p5 => {
     let background = p5.loadImage(BackgroundImage);
     let spriteImage = p5.loadImage(Images);
@@ -488,21 +402,15 @@ const sketch = p5 => {
         storage = new Storage();
         score = 0;
         pipe.generateFirst();
-        bird.draw();
-        floor.draw();
-        const dataFromStorage = storage.getStorageData();
-        bestScore = dataFromStorage?.bestScore || 0;
+        bestScore = storage.getStorageData()?.bestScore || 0;
     };
 
     const canvasClick = () => {
         if (p5.mouseButton === 'left') {
             if (!gameOver) bird?.jump();
             if (!gameStart) gameStart = true;
-            if (gameOver && 
-                p5.mouseX > CANVAS_WIDTH / 2 - 85 &&
-                p5.mouseX < CANVAS_WIDTH / 2 + 75 &&
-                p5.mouseY > CANVAS_HEIGHT / 2 + 100 &&
-                p5.mouseY < CANVAS_HEIGHT / 2 + 160
+            if (gameOver && p5.mouseX > CANVAS_WIDTH / 2 - 85 && p5.mouseX < CANVAS_WIDTH / 2 + 75 &&
+                p5.mouseY > CANVAS_HEIGHT / 2 + 100 && p5.mouseY < CANVAS_HEIGHT / 2 + 160
             ) resetGame();
         }
     };
@@ -516,8 +424,6 @@ const sketch = p5 => {
         const canvas = p5.createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
         canvas.mousePressed(canvasClick);
         canvas.touchStarted(canvasTouch);
-        
-        // Create compact UI
         createCompactUI();
         resetGame();
     };
@@ -539,7 +445,6 @@ const sketch = p5 => {
             if (gameOver) {
                 dieAudio.currentTime = 0;
                 dieAudio.play();
-                
                 if (isWalletConnected && score > 0) {
                     setTimeout(() => submitScoreToBlockchain(score), 1000);
                 }
@@ -558,10 +463,7 @@ const sketch = p5 => {
             else floor.update();
         }
 
-        if (!gameStart) {
-            gameText.startText();
-        }
-
+        if (!gameStart) gameText.startText();
         if (gameOver) {
             if (score > bestScore) {
                 bestScore = score;
@@ -579,10 +481,8 @@ const sketch = p5 => {
             if (!gameOver) bird?.jump();
             if (!gameStart) gameStart = true;
         }
-        if (e.key === 'r' && gameOver) {
-            resetGame();
-        }
+        if (e.key === 'r' && gameOver) resetGame();
     };
-}
+};
 
 new P5(sketch, 'Game');
