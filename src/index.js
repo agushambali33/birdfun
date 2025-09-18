@@ -97,25 +97,7 @@ async function connectWallet() {
     return;
   }
   try {
-    try {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: HELIOS_CHAIN_ID_HEX }]
-      });
-    } catch (switchErr) {
-      if (switchErr && switchErr.code === 4902) {
-        await window.ethereum.request({
-          method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: HELIOS_CHAIN_ID_HEX,
-            chainName: 'Helios Testnet',
-            nativeCurrency: { name: 'Helios', symbol: 'HLS', decimals: 18 },
-            rpcUrls: [HELIOS_RPC],
-            blockExplorerUrls: ['https://explorer.helioschainlabs.org']
-          }]
-        });
-      }
-    }
+    await ensureCorrectChain();
 
     await window.ethereum.request({ method: 'eth_requestAccounts' });
 
@@ -126,8 +108,7 @@ async function connectWallet() {
     playerAddress = await signer.getAddress();
     isWalletConnected = !!playerAddress;
 
-    try { playerPoints = await contract.playerPoints(playerAddress); } catch {}
-    try { rewardPreview = await contract.getRewardPreview(playerAddress); } catch {}
+    await updatePlayerData();
 
     toggleWeb3UI();
     showToast('Wallet connected', 'success');
@@ -140,51 +121,80 @@ async function connectWallet() {
   }
 }
 
-function submitScoreToBlockchain(score) {
-  if (!provider || !isWalletConnected) return;
-  if (score <= 0) return;
-  (async () => {
-    try {
-      signer = await provider.getSigner();
-      contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-
-      showToast('Submitting score...', 'loading');
-      const tx = await contract.submitPoints(score, { gasLimit: 300000 });
-      await tx.wait();
-      playerPoints = await contract.playerPoints(playerAddress).catch(() => ethers.BigNumber.from(0));
-      rewardPreview = await contract.getRewardPreview(playerAddress).catch(() => ethers.BigNumber.from(0));
-      toggleWeb3UI();
-      showToast(`Score ${score} submitted`, 'success');
-    } catch (err) {
-      console.error('submitScore error', err);
-      showToast(err?.message || 'Submit failed', 'error');
+async function ensureCorrectChain() {
+  try {
+    await window.ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: HELIOS_CHAIN_ID_HEX }]
+    });
+  } catch (switchErr) {
+    if (switchErr.code === 4902) {
+      await window.ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: HELIOS_CHAIN_ID_HEX,
+          chainName: 'Helios Testnet',
+          nativeCurrency: { name: 'Helios', symbol: 'HLS', decimals: 18 },
+          rpcUrls: [HELIOS_RPC],
+          blockExplorerUrls: ['https://explorer.helioschainlabs.org']
+        }]
+      });
+    } else {
+      throw switchErr;
     }
-  })();
+  }
 }
 
-function redeemPoints() {
-  if (!provider || !isWalletConnected) return;
-  if (bnToNumberSafe(playerPoints) <= 0) {
+async function updatePlayerData() {
+  try {
+    playerPoints = await contract.playerPoints(playerAddress) || ethers.BigNumber.from(0);
+    rewardPreview = await contract.getRewardPreview(playerAddress) || ethers.BigNumber.from(0);
+  } catch (err) {
+    console.error('updatePlayerData error', err);
+  }
+}
+
+async function submitScoreToBlockchain(score) {
+  if (!isWalletConnected || score <= 0) return;
+  try {
+    await ensureCorrectChain();
+    provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
+    signer = await provider.getSigner();
+    contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+    showToast('Submitting score...', 'loading');
+    const tx = await contract.submitPoints(score, { gasLimit: 300000 });
+    await tx.wait();
+    await updatePlayerData();
+    toggleWeb3UI();
+    showToast(`Score ${score} submitted`, 'success');
+  } catch (err) {
+    console.error('submitScore error', err);
+    showToast(err?.message || 'Submit failed', 'error');
+  }
+}
+
+async function redeemPoints() {
+  if (!isWalletConnected || bnToNumberSafe(playerPoints) <= 0) {
     showToast('No points to claim', 'warning');
     return;
   }
-  (async () => {
-    try {
-      signer = await provider.getSigner();
-      contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+  try {
+    await ensureCorrectChain();
+    provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
+    signer = await provider.getSigner();
+    contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
-      showToast('Claiming...', 'loading');
-      const tx = await contract.redeem({ gasLimit: 300000 });
-      await tx.wait();
-      playerPoints = await contract.playerPoints(playerAddress).catch(() => ethers.BigNumber.from(0));
-      rewardPreview = await contract.getRewardPreview(playerAddress).catch(() => ethers.BigNumber.from(0));
-      toggleWeb3UI();
-      showToast('Claimed!', 'success');
-    } catch (err) {
-      console.error('redeem error', err);
-      showToast(err?.message || 'Claim failed', 'error');
-    }
-  })();
+    showToast('Claiming...', 'loading');
+    const tx = await contract.redeem({ gasLimit: 300000 });
+    await tx.wait();
+    await updatePlayerData();
+    toggleWeb3UI();
+    showToast('Claimed!', 'success');
+  } catch (err) {
+    console.error('redeem error', err);
+    showToast(err?.message || 'Claim failed', 'error');
+  }
 }
 
 /* ====== UI ====== */
@@ -285,9 +295,10 @@ const sketch = p5 => {
     if (p5.frameCount % 60 === 0) {
       (async () => {
         try {
-          if (isWalletConnected && contract && playerAddress) {
-            playerPoints = await contract.playerPoints(playerAddress).catch(()=>ethers.BigNumber.from(0));
-            rewardPreview = await contract.getRewardPreview(playerAddress).catch(()=>ethers.BigNumber.from(0));
+          if (isWalletConnected && playerAddress) {
+            // Use read-only for periodic updates
+            playerPoints = await contractReadOnly.playerPoints(playerAddress).catch(()=>ethers.BigNumber.from(0));
+            rewardPreview = await contractReadOnly.getRewardPreview(playerAddress).catch(()=>ethers.BigNumber.from(0));
           }
         } catch {}
         toggleWeb3UI();
