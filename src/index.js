@@ -25,6 +25,7 @@ export const dieAudio = new Audio(dieSound);
 // === WEB3 INTEGRATION ===
 import { ethers } from 'ethers';
 
+// Contract config - V2 CONTRACT (VERIFIED!)
 const CONTRACT_ADDRESS = '0xf83Ae7b7303346d003FEd85Ad07cd8e98F9eadC6';
 const CONTRACT_ABI = [
     "function submitPoints(uint256 _points) external",
@@ -40,231 +41,206 @@ let playerPoints = 0;
 let playerAddress = null;
 let rewardPreview = 0;
 
-// DOM elements - DUAL LAYOUT
-let connectButton, rewardPanel, pointsEl, rewardEl, claimButton, panelToggle, notificationEl;
-
-// Notification system
-let currentNotification = null;
+// DOM elements - INITIALIZE DULU DI SINI
+let walletStatusEl = null;
+let pointsDisplayEl = null;
+let rewardPreviewEl = null;
+let connectBtnEl = null;
+let redeemBtnEl = null;
 
 // Web3 functions
 const connectWallet = async () => {
-    console.log('🔄 Connecting...');
+    console.log('🔄 Starting wallet connection...'); // DEBUG
     
-    if (typeof window.ethereum === 'undefined') {
-        showNotification('Install MetaMask!', 'error');
-        return;
-    }
-    
-    try {
-        await window.ethereum.request({ method: 'eth_requestAccounts' });
-        provider = new ethers.providers.Web3Provider(window.ethereum);
-        signer = provider.getSigner();
-        contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-        
-        playerAddress = await signer.getAddress();
-        isWalletConnected = true;
-        
+    if (typeof window.ethereum !== 'undefined') {
         try {
-            playerPoints = await contract.playerPoints(playerAddress);
-            rewardPreview = await contract.getRewardPreview(playerAddress);
-        } catch (e) {
-            playerPoints = 0;
-            rewardPreview = 0;
+            // Request account access
+            await window.ethereum.request({ method: 'eth_requestAccounts' });
+            
+            // Setup provider and signer
+            provider = new ethers.providers.Web3Provider(window.ethereum);
+            signer = provider.getSigner();
+            contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+            
+            playerAddress = await signer.getAddress();
+            isWalletConnected = true;
+            
+            console.log('✅ Wallet connected:', playerAddress);
+            console.log('📊 DOM Elements ready:', {
+                walletStatus: !!walletStatusEl,
+                pointsDisplay: !!pointsDisplayEl,
+                connectBtn: !!connectBtnEl,
+                redeemBtn: !!redeemBtnEl
+            });
+            
+            // Fetch current points
+            try {
+                playerPoints = await contract.playerPoints(playerAddress);
+                rewardPreview = await contract.getRewardPreview(playerAddress);
+                console.log('📊 Fetched points:', playerPoints.toString());
+                console.log('💰 Fetched reward preview:', ethers.utils.formatUnits(rewardPreview, 18));
+            } catch (fetchError) {
+                console.error('⚠️ Fetch error:', fetchError);
+                playerPoints = 0;
+                rewardPreview = 0;
+            }
+            
+            // CRITICAL: Update UI
+            toggleWeb3UI();
+            
+            // Listen for changes
+            if (window.ethereum) {
+                window.ethereum.on('accountsChanged', () => {
+                    console.log('👤 Account changed, reloading...');
+                    window.location.reload();
+                });
+                window.ethereum.on('chainChanged', () => {
+                    console.log('⛓️ Chain changed, reloading...');
+                    window.location.reload();
+                });
+            }
+            
+        } catch (error) {
+            console.error('❌ Connection error:', error);
+            alert('Failed to connect wallet: ' + error.message);
         }
-        
-        updateUI();
-        updateConnectButton();
-        showNotification('Wallet connected!', 'success');
-        
-        window.ethereum.on('accountsChanged', () => window.location.reload());
-        window.ethereum.on('chainChanged', () => window.location.reload());
-        
-    } catch (error) {
-        console.error('Connection failed:', error);
-        showNotification('Connection failed', 'error');
+    } else {
+        alert('Please install MetaMask!');
     }
 };
 
 const submitScoreToBlockchain = async (score) => {
     if (!isWalletConnected || !contract) {
-        showNotification('Connect wallet first!', 'warning');
+        alert('Please connect wallet first!');
         return false;
     }
     
     try {
-        const tx = await contract.submitPoints(score, { gasLimit: 300000 });
-        showNotification('Submitting...', 'loading');
+        console.log(`📤 Submitting score ${score}...`);
         
+        const tx = await contract.submitPoints(score, {
+            gasLimit: 300000
+        });
+        
+        console.log('⏳ Tx sent, waiting confirmation...');
         const receipt = await tx.wait();
-        playerPoints = await contract.playerPoints(playerAddress);
-        rewardPreview = await contract.getRewardPreview(playerAddress);
         
-        updateUI();
-        showNotification(`+${score} points!`, 'success');
-        animateScoreGain(pointsEl, score);
+        console.log('✅ Submitted! TX:', receipt.transactionHash);
+        alert(`Score ${score} submitted!\nTX: https://sepolia.etherscan.io/tx/${receipt.transactionHash}`);
         
+        // Update points
+        try {
+            playerPoints = await contract.playerPoints(playerAddress);
+            rewardPreview = await contract.getRewardPreview(playerAddress);
+            console.log('📊 Updated points:', playerPoints.toString());
+        } catch (error) {
+            console.error('Update error:', error);
+            playerPoints += score; // Fallback
+        }
+        
+        toggleWeb3UI();
         return true;
+        
     } catch (error) {
-        console.error('Submit failed:', error);
-        let msg = error.code === 4001 ? 'Cancelled' : 'Submit failed';
-        showNotification(msg, 'error');
+        console.error('❌ Submit error:', error);
+        let msg = 'Submit failed: ';
+        if (error.code === 4001) msg += 'User rejected';
+        else if (error.message.includes('insufficient funds')) msg += 'Low ETH (get from faucet)';
+        else msg += error.message;
+        alert(msg);
         return false;
     }
 };
 
 const redeemPoints = async () => {
-    if (!isWalletConnected || !contract || playerPoints === 0) {
-        showNotification('No points to claim!', 'warning');
+    console.log('💰 Starting redeem...');
+    
+    if (!isWalletConnected || !contract) {
+        alert('Connect wallet first!');
+        return;
+    }
+    
+    if (playerPoints === 0) {
+        alert('No points to redeem!');
         return;
     }
     
     try {
         const tx = await contract.redeem({ gasLimit: 300000 });
-        showNotification('Claiming tokens...', 'loading');
+        console.log('⏳ Redeem tx sent...');
         
         const receipt = await tx.wait();
+        console.log('✅ Redeemed! TX:', receipt.transactionHash);
+        
         const tokens = (playerPoints / 10).toFixed(2);
+        alert(`🎉 Redeemed ${playerPoints} points!\n💎 Got ${tokens} tokens\nTX: https://sepolia.etherscan.io/tx/${receipt.transactionHash}`);
         
         playerPoints = 0;
         rewardPreview = 0;
-        updateUI();
-        
-        showNotification(`Claimed ${tokens} tokens!`, 'success');
-        animateClaimSuccess();
+        toggleWeb3UI();
         
     } catch (error) {
-        console.error('Redeem failed:', error);
-        let msg = 'Claim failed';
-        if (error.message.includes('No points')) msg = 'No points';
-        else if (error.code === 4001) msg = 'Cancelled';
-        showNotification(msg, 'error');
+        console.error('❌ Redeem error:', error);
+        let msg = 'Redeem failed: ';
+        if (error.message.includes('No points')) msg += 'No points available';
+        else if (error.message.includes('Insufficient reward pool')) msg += 'Pool empty - contact admin';
+        else if (error.code === 4001) msg += 'User rejected';
+        else msg += error.message;
+        alert(msg);
     }
 };
 
-// UI Functions
-const updateUI = () => {
-    if (pointsEl) pointsEl.textContent = playerPoints;
-    if (rewardEl) {
-        const tokens = (rewardPreview / 1e18).toFixed(2);
-        rewardEl.innerHTML = `💎 ${tokens}`;
-        rewardEl.className = tokens > 0 ? 'reward active' : 'reward';
-    }
+// FIXED TOGGLE FUNCTION
+const toggleWeb3UI = () => {
+    console.log('🔄 Toggling UI - Connected:', isWalletConnected); // DEBUG
     
-    if (claimButton) {
-        const canClaim = playerPoints > 0;
-        claimButton.disabled = !canClaim;
-        claimButton.className = canClaim ? 'claim-btn active' : 'claim-btn';
-    }
-};
-
-const updateConnectButton = () => {
-    if (connectButton) {
-        if (isWalletConnected) {
-            connectButton.innerHTML = `🔗 ${playerAddress.slice(-4)}`;
-            connectButton.className = 'connect-btn connected';
+    // Wallet status
+    if (walletStatusEl) {
+        if (isWalletConnected && playerAddress) {
+            walletStatusEl.innerHTML = `Connected: ${playerAddress.slice(0, 6)}...${playerAddress.slice(-4)}`;
+            walletStatusEl.style.color = '#4CAF50';
+            walletStatusEl.style.borderColor = '#4CAF50';
         } else {
-            connectButton.innerHTML = '🔗 Connect';
-            connectButton.className = 'connect-btn';
+            walletStatusEl.innerHTML = 'Not Connected';
+            walletStatusEl.style.color = '#ff9800';
+            walletStatusEl.style.borderColor = '#ff9800';
         }
     }
-};
-
-const toggleRewardPanel = () => {
-    if (rewardPanel) {
-        const isOpen = rewardPanel.classList.contains('open');
-        rewardPanel.classList.toggle('open');
-        panelToggle.innerHTML = isOpen ? '▼' : '▲';
+    
+    // Points display
+    if (pointsDisplayEl) {
+        pointsDisplayEl.innerHTML = `Points: ${playerPoints || 0}`;
+        pointsDisplayEl.style.color = playerPoints > 0 ? '#4CAF50' : '#ffffff';
+        pointsDisplayEl.style.borderColor = playerPoints > 0 ? '#4CAF50' : '#4CAF50';
     }
-};
-
-const animateScoreGain = (element, score) => {
-    if (!element) return;
-    element.style.transform = 'scale(1.1)';
-    element.style.color = '#FFD700';
-    setTimeout(() => {
-        element.style.transform = 'scale(1)';
-        element.style.color = '#4CAF50';
-    }, 200);
-};
-
-const animateClaimSuccess = () => {
-    if (pointsEl) {
-        pointsEl.style.transform = 'scale(0.95)';
-        pointsEl.style.color = '#FFD700';
-        setTimeout(() => {
-            pointsEl.style.transform = 'scale(1)';
-            pointsEl.style.color = '#4CAF50';
-        }, 150);
+    
+    // Connect button - HIDE SETELAH CONNECT
+    if (connectBtnEl) {
+        connectBtnEl.style.display = isWalletConnected ? 'none' : 'block';
+        console.log('Connect button display:', connectBtnEl.style.display); // DEBUG
     }
-};
-
-// Notification System - Compact Toasts
-const showNotification = (message, type = 'info') => {
-    if (currentNotification) currentNotification.remove();
     
-    const notification = document.createElement('div');
-    notification.className = `toast ${type}`;
-    notification.innerHTML = `
-        <span class="icon">${getIcon(type)}</span>
-        <span>${message}</span>
-    `;
+    // Redeem button - SHOW SETELAH CONNECT
+    if (redeemBtnEl) {
+        const shouldShow = isWalletConnected && playerPoints > 0;
+        redeemBtnEl.style.display = shouldShow ? 'block' : 'none';
+        console.log('Redeem button display:', redeemBtnEl.style.display, 'Points:', playerPoints); // DEBUG
+    }
     
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: ${getToastColor(type)};
-        color: white;
-        padding: 10px 16px;
-        border-radius: 8px;
-        font-family: 'Courier New', monospace;
-        font-size: 12px;
-        font-weight: 500;
-        z-index: 1002;
-        min-width: 200px;
-        max-width: 280px;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-        border-left: 3px solid ${getBorderColor(type)};
-        opacity: 0;
-        transform: translateX(100%);
-        transition: all 0.3s ease;
-    `;
-    
-    document.body.appendChild(notification);
-    
-    requestAnimationFrame(() => {
-        notification.style.opacity = '1';
-        notification.style.transform = 'translateX(0)';
-    });
-    
-    currentNotification = notification;
-    
-    setTimeout(() => {
-        notification.style.opacity = '0';
-        notification.style.transform = 'translateX(100%)';
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
-};
-
-const getIcon = (type) => {
-    const icons = { success: '✅', error: '❌', warning: '⚠️', loading: '⏳', info: 'ℹ️' };
-    return icons[type] || icons.info;
-};
-
-const getToastColor = (type) => {
-    const colors = {
-        success: 'linear-gradient(135deg, #4CAF50, #45a049)',
-        error: 'linear-gradient(135deg, #f44336, #d32f2f)',
-        warning: 'linear-gradient(135deg, #ff9800, #f57c00)',
-        loading: 'linear-gradient(135deg, #9E9E9E, #757575)',
-        info: 'linear-gradient(135deg, #2196F3, #1976D2)'
-    };
-    return colors[type] || colors.info;
-};
-
-const getBorderColor = (type) => {
-    const colors = { success: '#4CAF50', error: '#f44336', warning: '#ff9800', loading: '#9E9E9E', info: '#2196F3' };
-    return colors[type] || colors.info;
+    // Reward preview - SHOW SETELAH CONNECT
+    if (rewardPreviewEl) {
+        const shouldShow = isWalletConnected;
+        rewardPreviewEl.style.display = shouldShow ? 'block' : 'none';
+        
+        if (shouldShow && rewardPreview) {
+            const tokens = (rewardPreview / 1e18).toFixed(2);
+            rewardPreviewEl.innerHTML = `💎 ${tokens} tokens`;
+            rewardPreviewEl.style.color = tokens > 0 ? '#FFD700' : '#888';
+        } else {
+            rewardPreviewEl.innerHTML = '💎 0.00 tokens';
+            rewardPreviewEl.style.color = '#888';
+        }
+    }
 };
 
 const sketch = p5 => {
@@ -286,8 +262,8 @@ const sketch = p5 => {
         pipe.generateFirst();
         bird.draw();
         floor.draw();
-        const data = storage.getStorageData();
-        bestScore = data?.bestScore || 0;
+        const dataFromStorage = storage.getStorageData();
+        bestScore = dataFromStorage?.bestScore || 0;
     };
 
     const canvasClick = () => {
@@ -313,300 +289,151 @@ const sketch = p5 => {
         canvas.mousePressed(canvasClick);
         canvas.touchStarted(canvasTouch);
         
-        createDualUI();
+        // CRITICAL: Create UI BEFORE resetGame
+        createWeb3UI();
         resetGame();
     };
 
-    // DUAL UI SYSTEM - MINI CONNECT + COLLAPSIBLE PANEL
-    const createDualUI = () => {
-        console.log('🎨 Creating dual UI...');
+    // FIXED UI CREATION - ASSIGN ELEMENTS PROPERLY
+    const createWeb3UI = () => {
+        console.log('🛠️ Creating Web3 UI...'); // DEBUG
         
-        // 1. MINI CONNECT BUTTON - KIRI ATAS (SEMPRE VISIBLE)
-        connectButton = document.createElement('button');
-        connectButton.className = 'connect-btn';
-        connectButton.innerHTML = '🔗';
-        connectButton.style.cssText = `
+        // Container untuk semua UI elements
+        const uiContainer = document.createElement('div');
+        uiContainer.id = 'web3-ui-container';
+        uiContainer.style.cssText = `
             position: fixed;
             top: 20px;
             left: 20px;
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            border: none;
-            background: linear-gradient(135deg, #4CAF50, #45a049);
-            color: white;
-            font-size: 18px;
-            font-weight: bold;
-            cursor: pointer;
             z-index: 1001;
-            box-shadow: 0 4px 16px rgba(76,175,80,0.3);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
-            align-items: center;
-            justify-content: center;
+            flex-direction: column;
+            gap: 12px;
         `;
-        
-        connectButton.onmouseover = () => {
-            if (!isWalletConnected) {
-                connectButton.style.transform = 'scale(1.05)';
-                connectButton.style.boxShadow = '0 6px 20px rgba(76,175,80,0.4)';
-            }
-        };
-        
-        connectButton.onmouseout = () => {
-            connectButton.style.transform = 'scale(1)';
-            connectButton.style.boxShadow = '0 4px 16px rgba(76,175,80,0.3)';
-        };
-        
-        connectButton.onclick = connectWallet;
-        document.body.appendChild(connectButton);
-        
-        // 2. COLLAPSIBLE REWARD PANEL - KANAN BAWAH
-        rewardPanel = document.createElement('div');
-        rewardPanel.id = 'reward-panel';
-        rewardPanel.className = 'closed';
-        rewardPanel.innerHTML = `
-            <div class="panel-header">
-                <span class="panel-icon">💎</span>
-                <span class="panel-title">REWARDS</span>
-                <button class="panel-toggle" id="panel-toggle">▼</button>
-            </div>
-            <div class="panel-content">
-                <div class="stat-line">
-                    <span class="stat-label">Points</span>
-                    <span class="stat-value" id="points-value">0</span>
-                </div>
-                <div class="stat-line">
-                    <span class="stat-label">Tokens</span>
-                    <span class="stat-value reward-value" id="reward-value">0.00</span>
-                </div>
-                <button class="claim-btn" id="claim-btn" disabled>
-                    <span class="claim-icon">⚡</span>
-                    <span class="claim-text">Claim</span>
-                </button>
-            </div>
-        `;
-        
-        rewardPanel.style.cssText = `
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            width: 260px;
-            background: linear-gradient(145deg, rgba(15,15,15,0.95), rgba(25,25,25,0.95));
-            backdrop-filter: blur(15px);
-            border-radius: 20px;
-            border: 1px solid rgba(255,255,255,0.08);
-            box-shadow: 
-                0 16px 40px rgba(0,0,0,0.4),
-                inset 0 1px 0 rgba(255,255,255,0.02);
-            z-index: 1000;
-            opacity: 0;
-            transform: translateY(100px) scale(0.9);
-            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-            font-family: 'Courier New', monospace;
-        `;
-        
-        document.body.appendChild(rewardPanel);
-        
-        // Assign elements
-        pointsEl = document.getElementById('points-value');
-        rewardEl = document.getElementById('reward-value');
-        claimButton = document.getElementById('claim-btn');
-        panelToggle = document.getElementById('panel-toggle');
-        
-        // Event listeners
-        if (panelToggle) panelToggle.onclick = toggleRewardPanel;
-        if (claimButton) claimButton.onclick = redeemPoints;
-        
-        // Initial state
-        updateConnectButton();
-        updateUI();
-        
-        // Auto-show panel on first connect
-        setTimeout(() => {
-            if (isWalletConnected) {
-                rewardPanel.style.opacity = '1';
-                rewardPanel.style.transform = 'translateY(0) scale(1)';
-            }
-        }, 500);
-        
-        // Add CSS animations
-        addDualUIStyles();
-    };
+        document.body.appendChild(uiContainer);
 
-    const addDualUIStyles = () => {
-        const style = document.createElement('style');
-        style.textContent = `
-            /* Panel Open Animation */
-            #reward-panel.open {
-                opacity: 1 !important;
-                transform: translateY(0) scale(1) !important;
-            }
-            
-            #reward-panel.closed {
-                opacity: 0.8;
-                transform: translateY(20px) scale(0.95);
-            }
-            
-            /* Panel Header */
-            .panel-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                padding: 16px 20px 12px;
-                border-bottom: 1px solid rgba(255,255,255,0.05);
-            }
-            
-            .panel-icon {
-                font-size: 20px;
-                margin-right: 8px;
-            }
-            
-            .panel-title {
-                color: #FFD700;
-                font-size: 14px;
-                font-weight: 600;
-                letter-spacing: 0.5px;
-            }
-            
-            .panel-toggle {
-                background: none;
-                border: none;
-                color: rgba(255,255,255,0.6);
-                font-size: 16px;
-                cursor: pointer;
-                padding: 4px;
-                border-radius: 50%;
-                transition: all 0.2s ease;
-            }
-            
-            .panel-toggle:hover {
-                color: #FFD700;
-                background: rgba(255,215,0,0.1);
-                transform: scale(1.1);
-            }
-            
-            /* Panel Content */
-            .panel-content {
-                padding: 0 20px 20px;
-            }
-            
-            .stat-line {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 12px 0;
-                border-bottom: 1px solid rgba(255,255,255,0.05);
-                margin-bottom: 8px;
-            }
-            
-            .stat-line:last-child {
-                border-bottom: none;
-                margin-bottom: 16px;
-            }
-            
-            .stat-label {
-                color: rgba(255,255,255,0.7);
-                font-size: 11px;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }
-            
-            .stat-value {
-                color: #4CAF50;
-                font-size: 16px;
-                font-weight: 600;
-            }
-            
-            .reward-value {
-                color: #FFD700 !important;
-                text-shadow: 0 0 4px rgba(255,215,0,0.3);
-            }
-            
-            /* Claim Button */
-            .claim-btn {
-                width: 100%;
-                padding: 12px;
-                border-radius: 12px;
-                border: none;
-                font-family: inherit;
-                font-size: 13px;
-                font-weight: 600;
-                cursor: pointer;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 8px;
-                transition: all 0.3s ease;
-                margin-top: 4px;
-            }
-            
-            .claim-btn {
-                background: linear-gradient(135deg, rgba(33,150,243,0.2), rgba(33,150,243,0.1));
-                color: #2196F3;
-                border: 1px solid rgba(33,150,243,0.3);
-            }
-            
-            .claim-btn.active {
-                background: linear-gradient(135deg, #2196F3, #1976D2);
-                color: white;
-                border-color: #2196F3;
-                cursor: pointer;
-                box-shadow: 0 4px 12px rgba(33,150,243,0.3);
-            }
-            
-            .claim-btn.active:hover {
-                transform: translateY(-1px);
-                box-shadow: 0 6px 16px rgba(33,150,243,0.4);
-            }
-            
-            .claim-btn.disabled:hover {
-                cursor: not-allowed;
-                opacity: 0.6;
-            }
-            
-            .claim-icon {
-                font-size: 14px;
-            }
-            
-            /* Connect Button States */
-            .connect-btn {
-                transition: all 0.3s ease !important;
-            }
-            
-            .connect-btn.connected {
-                background: linear-gradient(135deg, #4CAF50, #45a049) !important;
-                box-shadow: 0 4px 16px rgba(76,175,80,0.4) !important;
-            }
-            
-            .connect-btn.connected:hover {
-                transform: scale(1.05) !important;
-                box-shadow: 0 6px 20px rgba(76,175,80,0.5) !important;
-            }
-            
-            /* Toast Notifications */
-            .toast {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                padding: 8px 12px;
-                border-radius: 8px;
-                font-size: 12px;
-                font-weight: 500;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                border-left: 3px solid;
-                min-width: 180px;
-                max-width: 260px;
-            }
-            
-            .toast.success { background: rgba(76,175,80,0.95); border-left-color: #4CAF50; }
-            .toast.error { background: rgba(244,67,54,0.95); border-left-color: #f44336; }
-            .toast.warning { background: rgba(255,152,0,0.95); border-left-color: #ff9800; }
-            .toast.loading { background: rgba(158,158,158,0.95); border-left-color: #9E9E9E; }
-            
-            .toast .icon { font-size: 14px; min-width: 16px; }
+        // 1. Wallet Status
+        walletStatusEl = document.createElement('div');
+        walletStatusEl.id = 'wallet-status';
+        walletStatusEl.style.cssText = `
+            color: #ff9800;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            background: rgba(0,0,0,0.9);
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 2px solid #ff9800;
+            min-width: 180px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(255,152,0,0.2);
         `;
-        document.head.appendChild(style);
+        walletStatusEl.innerHTML = 'Not Connected';
+        uiContainer.appendChild(walletStatusEl);
+
+        // 2. Points Display
+        pointsDisplayEl = document.createElement('div');
+        pointsDisplayEl.id = 'points-display';
+        pointsDisplayEl.style.cssText = `
+            color: #4CAF50;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            font-weight: bold;
+            background: rgba(0,0,0,0.9);
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 2px solid #4CAF50;
+            min-width: 180px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(76,175,80,0.2);
+        `;
+        pointsDisplayEl.innerHTML = 'Points: 0';
+        uiContainer.appendChild(pointsDisplayEl);
+
+        // 3. Reward Preview
+        rewardPreviewEl = document.createElement('div');
+        rewardPreviewEl.id = 'reward-preview';
+        rewardPreviewEl.style.cssText = `
+            color: #888;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            background: rgba(0,0,0,0.9);
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 2px solid #888;
+            min-width: 180px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            display: none;
+        `;
+        rewardPreviewEl.innerHTML = '💎 0.00 tokens';
+        uiContainer.appendChild(rewardPreviewEl);
+
+        // 4. Connect Button
+        connectBtnEl = document.createElement('button');
+        connectBtnEl.id = 'connect-wallet';
+        connectBtnEl.innerHTML = '🔗 Connect Wallet';
+        connectBtnEl.style.cssText = `
+            padding: 10px 20px;
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            min-width: 180px;
+            box-shadow: 0 4px 12px rgba(76,175,80,0.3);
+            transition: all 0.3s ease;
+        `;
+        connectBtnEl.onmouseover = () => {
+            connectBtnEl.style.transform = 'translateY(-2px)';
+            connectBtnEl.style.boxShadow = '0 6px 16px rgba(76,175,80,0.4)';
+        };
+        connectBtnEl.onmouseout = () => {
+            connectBtnEl.style.transform = 'translateY(0)';
+            connectBtnEl.style.boxShadow = '0 4px 12px rgba(76,175,80,0.3)';
+        };
+        connectBtnEl.onclick = connectWallet;
+        uiContainer.appendChild(connectBtnEl);
+
+        // 5. Redeem Button
+        redeemBtnEl = document.createElement('button');
+        redeemBtnEl.id = 'redeem-btn';
+        redeemBtnEl.innerHTML = '💎 Claim Tokens';
+        redeemBtnEl.style.cssText = `
+            padding: 10px 20px;
+            background: linear-gradient(45deg, #2196F3, #1976D2);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            min-width: 180px;
+            box-shadow: 0 4px 12px rgba(33,150,243,0.3);
+            transition: all 0.3s ease;
+            display: none;
+        `;
+        redeemBtnEl.onmouseover = () => {
+            redeemBtnEl.style.transform = 'translateY(-2px)';
+            redeemBtnEl.style.boxShadow = '0 6px 16px rgba(33,150,243,0.4)';
+        };
+        redeemBtnEl.onmouseout = () => {
+            redeemBtnEl.style.transform = 'translateY(0)';
+            redeemBtnEl.style.boxShadow = '0 4px 12px rgba(33,150,243,0.3)';
+        };
+        redeemBtnEl.onclick = redeemPoints;
+        uiContainer.appendChild(redeemBtnEl);
+
+        console.log('✅ UI created, elements assigned:', {
+            walletStatus: !!walletStatusEl,
+            points: !!pointsDisplayEl,
+            connect: !!connectBtnEl,
+            redeem: !!redeemBtnEl
+        });
+
+        // Initial toggle
+        toggleWeb3UI();
     };
 
     p5.draw = () => {
@@ -628,7 +455,7 @@ const sketch = p5 => {
                 dieAudio.play();
                 
                 if (isWalletConnected && score > 0) {
-                    setTimeout(() => submitScoreToBlockchain(score), 800);
+                    setTimeout(() => submitScoreToBlockchain(score), 1000);
                 }
             }
 
@@ -645,8 +472,10 @@ const sketch = p5 => {
             else floor.update();
         }
 
-        if (!gameStart) gameText.startText();
-        
+        if (!gameStart) {
+            gameText.startText();
+        }
+
         if (gameOver) {
             if (score > bestScore) {
                 bestScore = score;
@@ -664,7 +493,9 @@ const sketch = p5 => {
             if (!gameOver) bird?.jump();
             if (!gameStart) gameStart = true;
         }
-        if (e.key === 'r' && gameOver) resetGame();
+        if (e.key === 'r' && gameOver) {
+            resetGame();
+        }
     };
 }
 
