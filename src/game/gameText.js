@@ -4,8 +4,8 @@ export default class GameText {
     constructor(p5, font) {
         this.p5 = p5;
         p5.textFont(font);
-        this.p5.strokeWeight(5);
-        this.p5.stroke(51);
+        this.p5.strokeWeight(1.5); // tipis biar huruf kebaca
+        this.p5.stroke(0);         // outline hitam
         this.p5.fill('white');
         this.p5.textAlign(this.p5.CENTER);
     }
