@@ -1,57 +1,46 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
   <meta name="theme-color" content="#0d1117">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=0">
 
   <title>FlappyBird Web3</title>
   <meta name="description" content="Play FlappyBird Web3 — tap to fly, earn points, and redeem blockchain rewards. 🚀">
 
-  <!-- Open Graph (Facebook, WhatsApp, Discord) -->
-  <meta property="og:title" content="FlappyBird Web3" />
-  <meta property="og:description" content="Play FlappyBird Web3 — tap to fly, earn points, and redeem blockchain rewards. 🚀" />
-  <meta property="og:image" content="https://birdfun.vercel.app/assets/thumbnail.png" />
-  <meta property="og:url" content="https://birdfun.vercel.app" />
-  <meta property="og:type" content="website" />
-
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="FlappyBird Web3" />
-  <meta name="twitter:description" content="Play FlappyBird Web3 — tap to fly, earn points, and redeem blockchain rewards. 🚀" />
-  <meta name="twitter:image" content="https://birdfun.vercel.app/assets/thumbnail.png" />
-
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="./assets/favicon.png" />
 
-  <!-- Minimal aesthetic CSS -->
+  <!-- Bootstrap (optional, for responsive footer) -->
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+    crossorigin="anonymous">
+
   <style>
     body {
-      margin: 0;
       background: linear-gradient(135deg, #0d1117, #161b22);
       color: #fff;
       font-family: 'Inter', sans-serif;
+      margin: 0;
+      min-height: 100vh;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
+      justify-content: space-between;
     }
 
     #Game {
       display: flex;
-      align-items: center;
       justify-content: center;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-      border-radius: 20px;
-      overflow: hidden;
+      align-items: center;
+      margin-top: 40px;
     }
 
     footer {
-      margin-top: 20px;
-      font-size: 13px;
-      color: #aaa;
+      margin: 20px 0;
+      font-size: 14px;
       text-align: center;
+      color: #bbb;
     }
 
     footer a {
@@ -63,20 +52,35 @@
     footer a:hover {
       color: #1f6feb;
     }
+
+    footer img {
+      vertical-align: middle;
+      margin-right: 6px;
+    }
   </style>
 </head>
+
 <body>
-  <!-- Game mount point -->
-  <div id="Game"></div>
+  <div class="container">
+    <div class="row">
+      <div id="Game" class="col-sm-12"></div>
+    </div>
 
-  <!-- Footer (clean aesthetic) -->
-  <footer>
-    <p>
-      Made with ❤️ by <a href="https://github.com/agushambali33" target="_blank">Agus Hambali</a>  
-    </p>
-  </footer>
+    <!-- Footer (credits) -->
+    <footer>
+      <p>
+        <img src="./assets/GitHub-Mark-Light-32px.png" alt="GitHub" />
+        <a href="https://github.com/agushambali33/flappyhelios" target="_blank">GitHub Repository</a>
+      </p>
+      <p>
+        <a href="https://www.buymeacoffee.com/barzinassa" target="_blank">
+          <img src="./assets/bmc-button.png" width="150" alt="Buy Me a Coffee">
+        </a>
+      </p>
+    </footer>
+  </div>
 
-  <!-- Game script -->
+  <!-- Game Script -->
   <script src="./index.js" type="module"></script>
 </body>
 </html>
