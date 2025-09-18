@@ -245,7 +245,7 @@ const sketch = p5 => {
     const data = storage.getStorageData(); bestScore = data?.bestScore || 0;
   };
 
-  const canvasClick = () => {
+  const handleInput = () => {
     if (!gameOver) bird?.jump();
     if (!gameStart) gameStart = true;
     if (gameOver &&
@@ -259,8 +259,8 @@ const sketch = p5 => {
     p5.createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT); p5.frameRate(60);
     injectStyles(); createTopBarUI(); toggleWeb3UI();
     resetGame();
-    p5.canvas.addEventListener('touchstart', e => { e.preventDefault(); bird?.jump(); if (!gameStart) gameStart = true; }, { passive: false });
-    p5.canvas.addEventListener('mousedown', canvasClick);
+    p5.canvas.addEventListener('touchstart', e => { e.preventDefault(); handleInput(); }, { passive: false });
+    p5.canvas.addEventListener('mousedown', e => { handleInput(); });
   };
 
   p5.draw = () => {
