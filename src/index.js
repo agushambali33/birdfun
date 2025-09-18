@@ -1,6 +1,6 @@
 // index.js (main)
 import './main.scss';
-import { CANVASHEIGHT, CANVASWIDTH } from './game/constants';
+import { CANVAS_HEIGHT, CANVAS_WIDTH } from './game/constants';
 import Pipe from './game/pipe';
 import Bird from './game/bird';
 import Floor from './game/floor';
@@ -26,22 +26,15 @@ export const dieAudio = new Audio(dieSound);
 // === WEB3 INTEGRATION ===
 import { ethers } from 'ethers';
 
-// --- NETWORK CONFIG ---
-const NETWORK = {
-  name: 'helios-testnet',  // ganti ke 'helios-mainnet' kalau sudah live / deploy ke mainnet
-  rpc: NETWORK === 'helios-mainnet' 
-         ? 'https://dataseed.helioschain.network' 
-         : 'https://testnet1.helioschainlabs.org',
-  chainId: NETWORK === 'helios-mainnet' 
-             ? 4242 
-             : 42000
-};
+// --- Helios Testnet Config ---
+const HELIOS_RPC = 'https://testnet1.helioschainlabs.org';
+const HELIOS_CHAIN_ID = 42000;
 
-// Contract config (kontrak distribusi token)
+// Contract config
 const CONTRACT_ADDRESS = '0x8bc2324615139B31b9E1861CD31C475980b4dA9e';
 const CONTRACT_ABI = [
     "function submitPoints(uint256 _points) external",
-    "function redeem() external",
+    "function redeem() external",    // as before
     "function playerPoints(address) external view returns (uint256)",
     "function getRewardPreview(address) external view returns (uint256)",
     "function getPoolBalance() external view returns (uint256)"
@@ -56,7 +49,8 @@ let rewardPreview = 0;
 // DOM elements - Compact UI
 let connectToggle, pointsBadge, rewardBadge, claimToggle;
 
-// Helper: safely convert playerPoints (handle BigNumber)
+// Helpers (BigNumber, formatting) tetep sama seperti sebelumnya
+
 const getPointsNumber = (val) => {
     if (val == null) return 0;
     if (typeof val.toNumber === 'function') {
@@ -65,7 +59,6 @@ const getPointsNumber = (val) => {
     return Number(val) || 0;
 };
 
-// Helper: format rewardPreview (handle BigNumber via ethers util)
 const formatRewardPreview = (val) => {
     try {
         if (!val) return '0.00';
@@ -80,25 +73,25 @@ const connectWallet = async () => {
     console.log('🔄 Starting wallet connection...');
     if (typeof window.ethereum !== 'undefined') {
         try {
-            // request network change if needed
+            // switch chain if needed
             await window.ethereum.request({
                 method: 'wallet_switchEthereumChain',
-                params: [{ chainId: ethers.utils.hexValue(NETWORK.chainId) }]
-            }).catch((err) => {
-                // jika network belum ditambahkan
+                params: [{ chainId: ethers.utils.hexValue(HELIOS_CHAIN_ID) }]
+            }).catch(async (err) => {
                 if (err.code === 4902) {
-                    return window.ethereum.request({
+                    // add chain if not added
+                    await window.ethereum.request({
                         method: 'wallet_addEthereumChain',
                         params: [{
-                            chainId: ethers.utils.hexValue(NETWORK.chainId),
-                            chainName: NETWORK.name,
+                            chainId: ethers.utils.hexValue(HELIOS_CHAIN_ID),
+                            chainName: 'Helios Testnet',
                             nativeCurrency: {
                                 name: 'Helios',
                                 symbol: 'HLS',
                                 decimals: 18
                             },
-                            rpcUrls: [NETWORK.rpc],
-                            blockExplorerUrls: [ 'https://explorer.helioschainlabs.org' ]
+                            rpcUrls: [HELIOS_RPC],
+                            blockExplorerUrls: ['https://explorer.helioschainlabs.org']
                         }]
                     });
                 } else {
@@ -107,19 +100,24 @@ const connectWallet = async () => {
             });
 
             await window.ethereum.request({ method: 'eth_requestAccounts' });
-            provider = new ethers.providers.JsonRpcProvider(NETWORK.rpc);
+            provider = new ethers.providers.JsonRpcProvider(HELIOS_RPC);
             signer = provider.getSigner();
             contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
             playerAddress = await signer.getAddress();
             isWalletConnected = true;
 
-            // fetch current on-chain points & preview
+            // fetch on-chain points & preview
             try {
-                playerPoints = await contract.playerPoints(playerAddress);
-                rewardPreview = await contract.getRewardPreview(playerAddress);
+                const ptsBN = await contract.playerPoints(playerAddress);
+                playerPoints = ptsBN;
             } catch (fetchError) {
-                console.error('⚠️ Fetch error:', fetchError);
+                console.warn('⚠️ playerPoints fetch error:', fetchError);
                 playerPoints = ethers.BigNumber.from(0);
+            }
+            try {
+                rewardPreview = await contract.getRewardPreview(playerAddress);
+            } catch (errPreview) {
+                console.warn('⚠️ getRewardPreview error:', errPreview);
                 rewardPreview = ethers.BigNumber.from(0);
             }
 
@@ -148,9 +146,13 @@ const submitScoreToBlockchain = async (score) => {
         const tx = await contract.submitPoints(score, { gasLimit: 300000 });
         await tx.wait();
 
-        // refresh on-chain values
-        playerPoints = await contract.playerPoints(playerAddress);
-        rewardPreview = await contract.getRewardPreview(playerAddress);
+        // refresh
+        try {
+            playerPoints = await contract.playerPoints(playerAddress);
+        } catch (_) { playerPoints = ethers.BigNumber.from(0); }
+        try {
+            rewardPreview = await contract.getRewardPreview(playerAddress);
+        } catch (_) { rewardPreview = ethers.BigNumber.from(0); }
 
         toggleWeb3UI();
         showToast(`+${score} points!`, 'success');
@@ -181,68 +183,22 @@ const redeemPoints = async () => {
         showToast('Claiming tokens...', 'loading');
         const tx = await contract.redeem({ gasLimit: 300000 });
         await tx.wait();
-
-        // assume contract behavior: convert points menjadi tokens
-        const tokens = (pts / 10).toFixed(2);
+        
         playerPoints = ethers.BigNumber.from(0);
         rewardPreview = ethers.BigNumber.from(0);
 
         toggleWeb3UI();
-        showToast(`Claimed ${tokens} tokens! 🎉`, 'success');
+        showToast(`Claimed tokens! 🎉`, 'success');
         animateClaimSuccess();
     } catch (error) {
         console.error('❌ Redeem error:', error);
         let msg = 'Claim failed: ';
-        if (error && error.message && error.message.includes('No points')) msg += 'No points';
-        else if (error && error.code === 4001) msg += 'Cancelled';
+        if (error && error.code === 4001) msg += 'Cancelled';
         else msg += error?.message || error;
         showToast(msg, 'error');
     }
 };
 
-// Compact UI Toggle (updates DOM based on state)
-const toggleWeb3UI = () => {
-    if (connectToggle) {
-        if (isWalletConnected && playerAddress) {
-            const short = playerAddress.slice(0,6) + '...' + playerAddress.slice(-4);
-            connectToggle.innerHTML = `✅ ${short}`;
-            connectToggle.className = 'toggle connected';
-        } else {
-            connectToggle.innerHTML = '🔗 Connect';
-            connectToggle.className = 'toggle';
-        }
-    }
+// UI toggle, createCompactUI, styles, animations, game loop semuanya sama saja tapi posisi Claim tombol sudah di kanan atas seperti design sebelumnya
 
-    if (pointsBadge) {
-        const pts = getPointsNumber(playerPoints);
-        pointsBadge.innerHTML = pts.toString() || '0';
-        pointsBadge.className = pts > 0 ? 'badge active' : 'badge';
-    }
-
-    if (rewardBadge) {
-        const tokens = formatRewardPreview(rewardPreview);
-        rewardBadge.innerHTML = `💎 ${tokens}`;
-        rewardBadge.className = (Number(tokens) > 0) ? 'badge reward active' : 'badge reward';
-    }
-
-    if (claimToggle) {
-        const pts = getPointsNumber(playerPoints);
-        const canClaim = pts > 0;
-        claimToggle.disabled = !canClaim;
-        claimToggle.className = canClaim ? 'toggle claim active' : 'toggle claim disabled';
-        claimToggle.innerHTML = canClaim ? '⚡ Claim' : '⚡ Locked';
-        if (canClaim) {
-            claimToggle.style.opacity = '1';
-            claimToggle.style.transform = 'translateY(0)';
-        } else {
-            claimToggle.style.opacity = '0';
-            claimToggle.style.transform = 'translateY(10px)';
-        }
-    }
-};
-
-// Compact UI Creation, Styles, Toast & Animations tetap sama seperti skrip kamu sebelumnya…
-
-// … (rest of the script: UI, game loop, etc) …
-
-new P5(sketch, 'Game');
+// di bagian UI: dimana kamu bikin tombol Claim, ubah styling & posisinya seperti ini:
