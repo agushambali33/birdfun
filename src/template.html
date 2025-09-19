@@ -9,7 +9,6 @@
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
     integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
   <title>Flappy Bird - Helios Testnet</title>
-  <meta name="google-site-verification" content="UoRb1chXxdu0BzKwtt0PneXVdCATq4u6d_mvn3gosC8" />
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
     body {
@@ -18,10 +17,10 @@
       font-family: 'Press Start 2P', cursive;
       margin: 0;
       padding: 0;
-      overflow: hidden; /* Hilangkan scroll */
+      overflow: hidden;
     }
     .container {
-      height: 100vh; /* Seluruh tinggi viewport */
+      height: 100vh;
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -31,7 +30,7 @@
     }
     #Game {
       width: 100%;
-      max-width: 400px; /* Batasi lebar game untuk responsivitas */
+      max-width: 400px;
       flex-grow: 0;
     }
     .content {
@@ -39,20 +38,22 @@
       margin-top: 10px;
       flex-grow: 0;
     }
-    .project-info {
-      font-size: 12px; /* Perkecil font untuk kompak */
-      margin-bottom: 8px;
+    /* Tombol Swap */
+    .btn-swap {
+      background: linear-gradient(135deg, #FFD54F, #FF8A00);
+      color: #000;
+      font-weight: bold;
+      padding: 8px 16px;
+      border-radius: 8px;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 12px;
+      margin: 8px 0;
     }
-    .social-icons a {
-      margin: 0 8px;
-      transition: transform 0.2s;
+    .btn-swap:hover {
+      background: linear-gradient(135deg, #FF8A00, #FFD54F);
     }
-    .social-icons a img {
-      width: 24px; /* Perkecil ikon untuk menghemat ruang */
-    }
-    .social-icons a:hover {
-      transform: scale(1.2);
-    }
+    /* Contract Address */
     .contract-address {
       display: flex;
       align-items: center;
@@ -65,8 +66,8 @@
       border: none;
       padding: 6px;
       border-radius: 5px 0 0 5px;
-      font-size: 10px; /* Perkecil font untuk input */
-      width: 200px; /* Perkecil lebar input */
+      font-size: 10px;
+      width: 200px;
       font-family: monospace;
     }
     .contract-address button {
@@ -78,29 +79,29 @@
       cursor: pointer;
       font-size: 10px;
     }
-    .btn-swap {
-      background: linear-gradient(135deg, #FFD54F, #FF8A00);
-      color: #000;
-      font-weight: bold;
-      padding: 8px 16px; /* Perkecil padding */
-      border-radius: 8px;
-      text-decoration: none;
-      display: inline-block;
-      font-size: 12px;
-      margin-top: 8px;
+    /* Sosmed */
+    .social-icons {
+      margin: 10px 0;
     }
-    .btn-swap:hover {
-      background: linear-gradient(135deg, #FF8A00, #FFD54F);
+    .social-icons a {
+      margin: 0 8px;
+      transition: transform 0.2s;
+    }
+    .social-icons a img {
+      width: 24px;
+    }
+    .social-icons a:hover {
+      transform: scale(1.2);
+    }
+    /* Info Text */
+    .project-info {
+      font-size: 10px;
+      margin-top: 8px;
+      opacity: 0.8;
     }
     @media (max-height: 600px) {
-      .project-info {
-        font-size: 10px;
-      }
-      .social-icons a img {
-        width: 20px;
-      }
       .contract-address input {
-        width: 180px;
+        width: 160px;
         font-size: 9px;
       }
       .contract-address button {
@@ -111,6 +112,9 @@
         font-size: 10px;
         padding: 6px 12px;
       }
+      .social-icons a img {
+        width: 20px;
+      }
     }
   </style>
 </head>
@@ -119,9 +123,20 @@
   <div class="container">
     <div id="Game"></div>
     <div class="content">
-      <div class="project-info">
-        <p>Flappy Bird on Helios Testnet - Play, Earn, Swap!</p>
+
+      <!-- Tombol Swap -->
+      <a href="https://swap.lunari.finance/pool?token0=0x5d9C011F4C8aD8efB4252f17e870085936CE296B&token1=0xD4949664cD82660AaE99bEdc034a0deA8A0bd517&fee=3000" 
+         target="_blank" class="btn-swap">
+        Swap Tokens
+      </a>
+
+      <!-- Address -->
+      <div class="contract-address">
+        <input type="text" value="0x5d9C011F4C8aD8efB4252f17e870085936CE296B" readonly />
+        <button onclick="copyContractAddress()">Copy</button>
       </div>
+
+      <!-- Sosmed -->
       <div class="social-icons">
         <a href="https://x.com/agushambali33" target="_blank">
           <img src="https://img.icons8.com/ios-filled/32/ffffff/twitter.png" alt="X" />
@@ -133,16 +148,12 @@
           <img src="https://img.icons8.com/ios-filled/32/ffffff/telegram-app.png" alt="Telegram" />
         </a>
       </div>
-      <div class="contract-address">
-        <input type="text" value="0x5d9C011F4C8aD8efB4252f17e870085936CE296B" readonly />
-        <button onclick="copyContractAddress()">Copy</button>
+
+      <!-- Info -->
+      <div class="project-info">
+        <p>Flappy Bird on Helios Testnet<br>Play • Earn • Swap</p>
       </div>
-      <p>
-        <a href="https://swap.lunari.finance/pool?token0=0x5d9C011F4C8aD8efB4252f17e870085936CE296B&token1=0xD4949664cD82660AaE99bEdc034a0deA8A0bd517&fee=3000" 
-           target="_blank" class="btn-swap">
-          Swap Tokens
-        </a>
-      </p>
+
     </div>
   </div>
 
