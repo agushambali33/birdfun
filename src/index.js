@@ -296,9 +296,9 @@ function createTopBarUI() {
 
 function toggleWeb3UI() {
   if (connectToggle) {
-    connectToggle.innerText = (isWalletConnected && playerAddress) ? `✅ ${playerAddress.slice(0,6)}...${playerAddress.slice(-4)}` : '🔗 Connect';
+    connectToggle.innerText = (isWalletConnected && playerAddress) ? `✅ ${playerAddress.slice(0,4)}...${playerAddress.slice(-3)}` : '🔗 Connect';
   }
-  if (pointsBadge) pointsBadge.innerText = `🏆 Score ${bnToNumberSafe(playerPoints)}`;
+  if (pointsBadge) pointsBadge.innerText = `🏆  ${bnToNumberSafe(playerPoints)}`;
   if (rewardBadge) rewardBadge.innerText = `💎 Reward ${formatReward(rewardPreview)}`;
   if (claimToggle) claimToggle.disabled = !(isWalletConnected && bnToNumberSafe(playerPoints) > 0);
 }
