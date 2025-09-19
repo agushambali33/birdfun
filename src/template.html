@@ -1,170 +1,136 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
-  <meta name="theme-color" content="#272b30">
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=0">
-  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
-    integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
-  <title>Flappy Bird - Helios Testnet</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flappy Bird Helios</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
     body {
-      background-color: #272b30;
-      color: #fff;
-      font-family: 'Press Start 2P', cursive;
       margin: 0;
-      padding: 0;
-      overflow: hidden;
+      background: #1e1e1e;
+      font-family: Arial, sans-serif;
+      color: #fff;
     }
-    .container {
-      height: 100vh;
+
+    .footer-section {
       display: flex;
       flex-direction: column;
-      justify-content: center;
       align-items: center;
-      padding: 0;
-      margin: 0;
+      padding: 12px;
+      gap: 10px;
     }
-    #Game {
-      width: 100%;
-      max-width: 400px;
-      flex-grow: 0;
-    }
-    .content {
-      text-align: center;
-      margin-top: 10px;
-      flex-grow: 0;
-    }
+
     /* Tombol Swap */
     .btn-swap {
-      background: linear-gradient(135deg, #FFD54F, #FF8A00);
+      display: inline-block;
+      background: linear-gradient(180deg, #ffcc00, #ff9900);
       color: #000;
       font-weight: bold;
-      padding: 8px 16px;
+      padding: 8px 18px;
       border-radius: 8px;
       text-decoration: none;
-      display: inline-block;
-      font-size: 12px;
-      margin: 8px 0;
+      font-size: 14px;
+      text-align: center;
+      transition: 0.2s;
     }
     .btn-swap:hover {
-      background: linear-gradient(135deg, #FF8A00, #FFD54F);
+      opacity: 0.9;
     }
+
     /* Contract Address */
     .contract-address {
       display: flex;
       align-items: center;
-      justify-content: center;
-      margin: 8px 0;
+      gap: 6px;
+      width: 100%;
+      max-width: 320px;
     }
+
     .contract-address input {
-      background: #fff;
-      color: #000;
+      flex: 1;
+      padding: 6px 8px;
       border: none;
-      padding: 6px;
-      border-radius: 5px 0 0 5px;
-      font-size: 10px;
-      width: 200px;
-      font-family: monospace;
+      border-radius: 6px;
+      font-size: 13px;
+      text-align: center;
     }
+
     .contract-address button {
-      background: #FFD54F;
-      color: #000;
+      padding: 6px 12px;
+      background: #ffcc00;
       border: none;
-      padding: 6px 10px;
-      border-radius: 0 5px 5px 0;
+      border-radius: 6px;
       cursor: pointer;
-      font-size: 10px;
+      font-size: 13px;
+      font-weight: bold;
     }
+
     /* Sosmed */
     .social-icons {
-      margin: 10px 0;
+      display: flex;
+      gap: 18px;
+      margin-top: 4px;
     }
-    .social-icons a {
-      margin: 0 8px;
+
+    .social-icons img {
+      width: 24px;
+      height: 24px;
+      filter: brightness(0) invert(1);
       transition: transform 0.2s;
     }
-    .social-icons a img {
-      width: 24px;
+    .social-icons img:hover {
+      transform: scale(1.1);
     }
-    .social-icons a:hover {
-      transform: scale(1.2);
-    }
-    /* Info Text */
-    .project-info {
-      font-size: 10px;
-      margin-top: 8px;
-      opacity: 0.8;
-    }
-    @media (max-height: 600px) {
-      .contract-address input {
-        width: 160px;
-        font-size: 9px;
-      }
-      .contract-address button {
-        font-size: 9px;
-        padding: 5px 8px;
-      }
-      .btn-swap {
-        font-size: 10px;
-        padding: 6px 12px;
-      }
-      .social-icons a img {
-        width: 20px;
-      }
+
+    /* Teks bawah */
+    .footer-text {
+      font-size: 12px;
+      color: #aaa;
+      margin-top: 6px;
+      text-align: center;
     }
   </style>
 </head>
-
 <body>
-  <div class="container">
-    <div id="Game"></div>
-    <div class="content">
+  <!-- Bagian Footer -->
+  <div class="footer-section">
+    <!-- Tombol Swap -->
+    <a href="https://swap.lunari.finance/pool?token0=0x5d9C011F4C8aD8efB4252f17e870085936CE296B&token1=0xD4949664cD82660AaE99bEdc034a0deA8A0bd517&fee=3000" 
+       target="_blank" class="btn-swap">
+      Swap Tokens
+    </a>
 
-      <!-- Tombol Swap -->
-      <a href="https://swap.lunari.finance/pool?token0=0x5d9C011F4C8aD8efB4252f17e870085936CE296B&token1=0xD4949664cD82660AaE99bEdc034a0deA8A0bd517&fee=3000" 
-         target="_blank" class="btn-swap">
-        Swap Tokens
-      </a>
-
-      <!-- Address -->
-      <div class="contract-address">
-        <input type="text" value="0x5d9C011F4C8aD8efB4252f17e870085936CE296B" readonly />
-        <button onclick="copyContractAddress()">Copy</button>
-      </div>
-
-      <!-- Sosmed -->
-      <div class="social-icons">
-        <a href="https://x.com/agushambali33" target="_blank">
-          <img src="https://img.icons8.com/ios-filled/32/ffffff/twitter.png" alt="X" />
-        </a>
-        <a href="https://discord.com/users/agushambali33" target="_blank">
-          <img src="https://img.icons8.com/ios-filled/32/ffffff/discord-logo.png" alt="Discord" />
-        </a>
-        <a href="https://t.me/agushambali33" target="_blank">
-          <img src="https://img.icons8.com/ios-filled/32/ffffff/telegram-app.png" alt="Telegram" />
-        </a>
-      </div>
-
-      <!-- Info -->
-      <div class="project-info">
-        <p>Flappy Bird on Helios Testnet<br>Play • Earn • Swap</p>
-      </div>
-
+    <!-- Contract Address -->
+    <div class="contract-address">
+      <input type="text" id="contractAddress" value="0x5d9C011F4C8aD8efB4252f17e870085936CE296B" readonly />
+      <button onclick="copyContractAddress()">Copy</button>
     </div>
+
+    <!-- Sosial Media -->
+    <div class="social-icons">
+      <a href="https://x.com/agushambali33" target="_blank">
+        <img src="https://img.icons8.com/ios-filled/28/ffffff/twitter.png" alt="X" />
+      </a>
+      <a href="https://discord.com/users/agushambali33" target="_blank">
+        <img src="https://img.icons8.com/ios-filled/28/ffffff/discord-logo.png" alt="Discord" />
+      </a>
+      <a href="https://t.me/agushambali33" target="_blank">
+        <img src="https://img.icons8.com/ios-filled/28/ffffff/telegram-app.png" alt="Telegram" />
+      </a>
+    </div>
+
+    <!-- Teks -->
+    <p class="footer-text">Flappy Bird on Helios Testnet • Play • Earn • Swap</p>
   </div>
 
   <script>
     function copyContractAddress() {
-      const input = document.querySelector('.contract-address input');
+      const input = document.getElementById("contractAddress");
       input.select();
-      document.execCommand('copy');
-      alert('Contract address copied!');
+      input.setSelectionRange(0, 99999); // untuk mobile
+      navigator.clipboard.writeText(input.value);
+      alert("Contract address copied!");
     }
   </script>
 </body>
-
 </html>
