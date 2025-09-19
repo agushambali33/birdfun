@@ -279,8 +279,8 @@ function createTopBarUI() {
   if (document.getElementById('game-topbar')) return;
   topBar = document.createElement('div'); topBar.id = 'game-topbar';
   connectToggle = document.createElement('button'); connectToggle.className = 'g-toggle'; connectToggle.innerText = '🔗 Connect'; connectToggle.onclick = () => connectWallet();
-  pointsBadge = document.createElement('div'); pointsBadge.className = 'g-badge'; pointsBadge.innerText = '⭐ 0';
-  rewardBadge = document.createElement('div'); rewardBadge.className = 'g-badge'; rewardBadge.innerText = '💎 0.00';
+  pointsBadge = document.createElement('div'); pointsBadge.className = 'g-badge'; pointsBadge.innerText = '🏆 0';
+  rewardBadge = document.createElement('div'); rewardBadge.className = 'g-badge'; rewardBadge.innerText = '💎 0.00 Token';
   topBar.append(connectToggle, pointsBadge, rewardBadge); document.body.appendChild(topBar);
   
   // Pastikan tombol claim dibuat ulang untuk menghindari event listener ganda
@@ -288,7 +288,7 @@ function createTopBarUI() {
   if (existingClaimBtn) existingClaimBtn.remove();
   claimToggle = document.createElement('button'); 
   claimToggle.id = 'claim-btn'; 
-  claimToggle.innerText = '⚡ Claim'; 
+  claimToggle.innerText = 'Claim'; 
   claimToggle.onclick = redeemPoints; 
   claimToggle.disabled = true;
   document.body.appendChild(claimToggle);
@@ -298,7 +298,7 @@ function toggleWeb3UI() {
   if (connectToggle) {
     connectToggle.innerText = (isWalletConnected && playerAddress) ? `✅ ${playerAddress.slice(0,6)}...${playerAddress.slice(-4)}` : '🔗 Connect';
   }
-  if (pointsBadge) pointsBadge.innerText = `⭐ ${bnToNumberSafe(playerPoints)}`;
+  if (pointsBadge) pointsBadge.innerText = `🏆 ${bnToNumberSafe(playerPoints)}`;
   if (rewardBadge) rewardBadge.innerText = `💎 ${formatReward(rewardPreview)}`;
   if (claimToggle) claimToggle.disabled = !(isWalletConnected && bnToNumberSafe(playerPoints) > 0);
 }
