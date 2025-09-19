@@ -37,8 +37,14 @@
 
     .content {
       text-align: center;
-      margin-top: 6px;
+      margin-top: 4px; /* dikurangi sedikit untuk kerapian */
       flex-grow: 0;
+      width: 100%;
+      max-width: 400px; /* sesuaikan dengan game untuk alignment */
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px; /* tambah gap antar elemen untuk rapi */
     }
 
     /* Tombol Swap */
@@ -46,12 +52,12 @@
       background: linear-gradient(135deg, #FFD54F, #FF8A00);
       color: #000;
       font-weight: bold;
-      padding: 5px 10px;
+      padding: 4px 8px; /* dikurangi padding untuk kompak */
       border-radius: 6px;
       text-decoration: none;
       display: inline-block;
-      font-size: 11px;
-      margin: 4px 0;
+      font-size: 10px;
+      transition: background 0.3s;
     }
 
     .btn-swap:hover {
@@ -62,15 +68,14 @@
     .contract-address {
       display: flex;
       width: 100%;
+      max-width: 320px; /* dilebarin dari 260px ke 320px */
       justify-content: center;
       align-items: center;
-      margin: 4px 0;
     }
 
     .contract-address input {
       flex: 1;
-      max-width: 260px; /* dilebarin */
-      height: 20px;     /* tetap tipis */
+      height: 20px;
       padding: 2px 6px;
       border-radius: 4px 0 0 4px;
       border: none;
@@ -79,8 +84,8 @@
       color: #000;
       background: #fff;
       text-overflow: ellipsis;
-      outline: none;          /* hilangin biru */
-      appearance: none;       /* hilangin bawaan browser */
+      outline: none;
+      appearance: none;
     }
 
     .contract-address button {
@@ -93,17 +98,23 @@
       font-weight: bold;
       cursor: pointer;
       font-size: 10px;
-      outline: none;       /* hilangin biru */
+      outline: none;
       appearance: none;
+      transition: background 0.3s;
+    }
+
+    .contract-address button:hover {
+      background: #FFA500; /* tambah hover untuk kerapian */
     }
 
     /* Sosmed */
     .social-icons {
-      margin: 6px 0;
+      display: flex;
+      justify-content: center;
+      gap: 6px; /* gunakan gap untuk rapi antar ikon */
     }
 
     .social-icons a {
-      margin: 0 5px;
       transition: transform 0.2s;
     }
 
@@ -118,8 +129,14 @@
     /* Info Text */
     .project-info {
       font-size: 9px;
-      margin-top: 4px;
-      opacity: 0.7;
+      opacity: 0.8; /* tingkatkan opacity sedikit untuk visibilitas */
+      margin-top: 2px; /* kurangi margin */
+      text-align: center;
+    }
+
+    .project-info p {
+      margin: 0; /* hilangkan margin default p untuk kompak */
+      line-height: 1.2; /* rapihin jarak baris */
     }
   </style>
 </head>
