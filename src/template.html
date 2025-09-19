@@ -58,10 +58,9 @@
       background: linear-gradient(135deg, #FF8A00, #FFD54F);
     }
 
-    /* Contract Address - lebih tipis */
+    /* Contract Address */
     .contract-address {
       display: flex;
-      gap: 6px;
       width: 100%;
       justify-content: center;
       align-items: center;
@@ -70,28 +69,32 @@
 
     .contract-address input {
       flex: 1;
-      max-width: 220px;
-      height: 20px;   /* lebih tipis */
-      padding: 2px 5px;
-      border-radius: 4px;
+      max-width: 260px; /* dilebarin */
+      height: 20px;     /* tetap tipis */
+      padding: 2px 6px;
+      border-radius: 4px 0 0 4px;
       border: none;
       font-family: monospace;
       font-size: 10px;
       color: #000;
       background: #fff;
       text-overflow: ellipsis;
+      outline: none;          /* hilangin biru */
+      appearance: none;       /* hilangin bawaan browser */
     }
 
     .contract-address button {
-      height: 20px;   /* sama tipis */
-      padding: 0 6px;
-      border-radius: 4px;
+      height: 20px;
+      padding: 0 8px;
+      border-radius: 0 4px 4px 0;
       border: none;
       background: #FFD54F;
       color: #000;
       font-weight: bold;
       cursor: pointer;
       font-size: 10px;
+      outline: none;       /* hilangin biru */
+      appearance: none;
     }
 
     /* Sosmed */
