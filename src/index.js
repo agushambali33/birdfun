@@ -87,14 +87,14 @@ const showToast = (msg, type = 'info') => {
   t.innerText = msg;
   document.body.appendChild(t);
   setTimeout(() => t.classList.add('show'), 10);
-  setTimeout(() => { t.classList.remove('show'); setTimeout(()=>t.remove(), 300); }, 2400);
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 2400);
 };
 
 /* ====== WEB3 ACTIONS ====== */
 async function connectWallet(silent = false) {
   if (typeof window.ethereum === 'undefined') {
     if (!silent) showToast('Please install MetaMask!', 'error');
-    return;
+    return false;
   }
   try {
     try {
@@ -128,7 +128,7 @@ async function connectWallet(silent = false) {
 
     if (accounts.length === 0) {
       if (!silent) showToast('No accounts found', 'error');
-      return;
+      return false;
     }
 
     provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
@@ -144,11 +144,22 @@ async function connectWallet(silent = false) {
     toggleWeb3UI();
     if (!silent) showToast('Wallet connected', 'success');
 
-    window.ethereum.on('accountsChanged', () => window.location.reload());
-    window.ethereum.on('chainChanged', () => window.location.reload());
+    window.ethereum.on('accountsChanged', () => {
+      isWalletConnected = false;
+      playerAddress = null;
+      autoConnectWallet();
+    });
+    window.ethereum.on('chainChanged', () => {
+      isWalletConnected = false;
+      playerAddress = null;
+      autoConnectWallet();
+    });
+
+    return true;
   } catch (err) {
     console.error('connectWallet error', err);
     if (!silent) showToast('Connect failed: ' + (err?.message || 'unknown'), 'error');
+    return false;
   }
 }
 
@@ -156,11 +167,24 @@ async function autoConnectWallet() {
   await connectWallet(true);
 }
 
+async function ensureWalletConnected() {
+  if (!isWalletConnected || !contract || !signer) {
+    const connected = await connectWallet(true);
+    if (!connected) {
+      showToast('Please reconnect wallet', 'error');
+      return false;
+    }
+  }
+  return true;
+}
+
 function submitScoreToBlockchain(score) {
-  if (!contract || !isWalletConnected) return;
   if (score <= 0) return;
   (async () => {
     try {
+      const connected = await ensureWalletConnected();
+      if (!connected) return;
+
       showToast('Submitting score...', 'loading');
       const tx = await contract.submitPoints(score, { gasLimit: 300000 });
       tx.wait().then(async () => {
@@ -180,13 +204,15 @@ function submitScoreToBlockchain(score) {
 }
 
 function redeemPoints() {
-  if (!contract || !isWalletConnected) return;
   if (bnToNumberSafe(playerPoints) <= 0) {
     showToast('No points to claim', 'warning');
     return;
   }
   (async () => {
     try {
+      const connected = await ensureWalletConnected();
+      if (!connected) return;
+
       showToast('Claiming...', 'loading');
       const tx = await contract.redeem({ gasLimit: 300000 });
       tx.wait().then(async () => {
@@ -305,8 +331,8 @@ const sketch = p5 => {
       (async () => {
         try {
           if (isWalletConnected && contract && playerAddress) {
-            playerPoints = await contract.playerPoints(playerAddress).catch(()=>ethers.BigNumber.from(0));
-            rewardPreview = await contract.getRewardPreview(playerAddress).catch(()=>ethers.BigNumber.from(0));
+            playerPoints = await contract.playerPoints(playerAddress).catch(() => ethers.BigNumber.from(0));
+            rewardPreview = await contract.getRewardPreview(playerAddress).catch(() => ethers.BigNumber.from(0));
           }
         } catch {}
         toggleWeb3UI();
