@@ -457,7 +457,7 @@ function createTopBarUI() {
   
   rewardBadge = document.createElement('div');
   rewardBadge.className = 'g-badge reward';
-  rewardBadge.innerText = '0.00';
+  rewardBadge.innerText = ' 0.00';
   rewardBadge.setAttribute('data-tooltip', 'Your Hbird rewards');
   
   claimToggle = document.createElement('button');
@@ -486,7 +486,7 @@ function toggleWeb3UI() {
     }
   }
   if (rewardBadge) {
-    rewardBadge.innerText = `${formatReward(rewardPreview)}`;
+    rewardBadge.innerText = ` ${formatReward(rewardPreview)}`;
   }
   if (claimToggle) {
     claimToggle.disabled = !(isWalletConnected && bnToNumberSafe(playerPoints) > 0);
