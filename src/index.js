@@ -168,17 +168,30 @@ async function autoConnectWallet() {
 }
 
 async function ensureWalletConnected() {
-  if (!isWalletConnected || !contract || !signer) {
+  if (!isWalletConnected || !contract || !signer || !playerAddress) {
     const connected = await connectWallet(true);
     if (!connected) {
       showToast('Please reconnect wallet', 'error');
       return false;
     }
   }
-  return true;
+  try {
+    // Periksa ulang chain dan signer
+    const network = await provider.getNetwork();
+    if (network.chainId !== HELIOS_CHAIN_ID) {
+      await connectWallet(true);
+    }
+    // Pastikan signer masih valid
+    await signer.getAddress();
+    return true;
+  } catch (err) {
+    console.error('ensureWalletConnected error', err);
+    await connectWallet(true);
+    return !!isWalletConnected;
+  }
 }
 
-function submitScoreToBlockchain(score) {
+async function submitScoreToBlockchain(score) {
   if (score <= 0) return;
   (async () => {
     try {
@@ -203,7 +216,7 @@ function submitScoreToBlockchain(score) {
   })();
 }
 
-function redeemPoints() {
+async function redeemPoints() {
   if (bnToNumberSafe(playerPoints) <= 0) {
     showToast('No points to claim', 'warning');
     return;
@@ -214,16 +227,31 @@ function redeemPoints() {
       if (!connected) return;
 
       showToast('Claiming...', 'loading');
-      const tx = await contract.redeem({ gasLimit: 300000 });
-      tx.wait().then(async () => {
-        try { playerPoints = await contract.playerPoints(playerAddress); } catch {}
-        try { rewardPreview = await contract.getRewardPreview(playerAddress); } catch {}
-        toggleWeb3UI();
-        showToast('Claimed!', 'success');
-      }).catch(err => {
-        console.error('claim wait error', err);
-        showToast('Claim failed', 'error');
-      });
+      let attempts = 0;
+      const maxAttempts = 2;
+      let success = false;
+
+      while (attempts < maxAttempts && !success) {
+        try {
+          const tx = await contract.redeem({ gasLimit: 500000 }); // Naikkan gas limit
+          await tx.wait();
+          success = true;
+          try { playerPoints = await contract.playerPoints(playerAddress); } catch {}
+          try { rewardPreview = await contract.getRewardPreview(playerAddress); } catch {}
+          toggleWeb3UI();
+          showToast('Claimed!', 'success');
+        } catch (err) {
+          attempts++;
+          console.error(`redeem attempt ${attempts} error`, err);
+          if (attempts === maxAttempts) {
+            showToast(err?.message || 'Claim failed', 'error');
+          } else {
+            showToast('Retrying claim...', 'loading');
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Delay sebelum retry
+            await ensureWalletConnected(); // Reinisialisasi wallet
+          }
+        }
+      }
     } catch (err) {
       console.error('redeem error', err);
       showToast(err?.message || 'Claim failed', 'error');
@@ -254,7 +282,15 @@ function createTopBarUI() {
   pointsBadge = document.createElement('div'); pointsBadge.className = 'g-badge'; pointsBadge.innerText = '⭐ 0';
   rewardBadge = document.createElement('div'); rewardBadge.className = 'g-badge'; rewardBadge.innerText = '💎 0.00';
   topBar.append(connectToggle, pointsBadge, rewardBadge); document.body.appendChild(topBar);
-  claimToggle = document.createElement('button'); claimToggle.id = 'claim-btn'; claimToggle.innerText = '⚡ Claim'; claimToggle.onclick = redeemPoints; claimToggle.disabled = true;
+  
+  // Pastikan tombol claim dibuat ulang untuk menghindari event listener ganda
+  const existingClaimBtn = document.getElementById('claim-btn');
+  if (existingClaimBtn) existingClaimBtn.remove();
+  claimToggle = document.createElement('button'); 
+  claimToggle.id = 'claim-btn'; 
+  claimToggle.innerText = '⚡ Claim'; 
+  claimToggle.onclick = redeemPoints; 
+  claimToggle.disabled = true;
   document.body.appendChild(claimToggle);
 }
 
@@ -333,9 +369,9 @@ const sketch = p5 => {
           if (isWalletConnected && contract && playerAddress) {
             playerPoints = await contract.playerPoints(playerAddress).catch(() => ethers.BigNumber.from(0));
             rewardPreview = await contract.getRewardPreview(playerAddress).catch(() => ethers.BigNumber.from(0));
+            toggleWeb3UI();
           }
         } catch {}
-        toggleWeb3UI();
       })();
     }
   };
