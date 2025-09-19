@@ -108,7 +108,7 @@ async function connectWallet(silent = false) {
           params: [{
             chainId: HELIOS_CHAIN_ID_HEX,
             chainName: 'Helios Testnet',
-            nativeCurrency: { name: 'Helios', symbol: 'HLS', decimals: 18 },
+            nativeCurrency: { name: 'Helios', symbol: 'Hbird', decimals: 18 },
             rpcUrls: [HELIOS_RPC],
             blockExplorerUrls: ['https://explorer.helioschainlabs.org']
           }]
@@ -317,12 +317,15 @@ function injectStyles() {
       animation: shine 1s ease-in-out;
     }
     .g-badge.reward::after {
-      content: 'HLS';
+      content: 'Hbird';
       font-size: 8px;
       margin-left: 4px;
       color: #00CED1;
     }
     #claim-btn {
+      position: fixed;
+      top: 38px;
+      right: 5px;
       height: 28px;
       padding: 0 10px;
       border-radius: 12px;
@@ -337,6 +340,7 @@ function injectStyles() {
       align-items: center;
       gap: 6px;
       transition: transform 0.2s, border-color 0.3s;
+      z-index: 9999;
     }
     #claim-btn:not([disabled]):hover {
       transform: scale(1.05);
@@ -420,6 +424,9 @@ function injectStyles() {
         font-size: 8px;
         padding: 5px 8px;
       }
+      #claim-btn {
+        top: 34px;
+      }
     }
   `;
   document.head.appendChild(s);
@@ -444,17 +451,21 @@ function createTopBarUI() {
   rewardBadge = document.createElement('div');
   rewardBadge.className = 'g-badge reward';
   rewardBadge.innerText = '💎 0.00';
-  rewardBadge.setAttribute('data-tooltip', 'Your HLS rewards');
+  rewardBadge.setAttribute('data-tooltip', 'Your Hbird rewards');
   
+  topBar.append(connectToggle, pointsBadge, rewardBadge);
+  document.body.appendChild(topBar);
+  
+  // Tombol Claim dipindahkan ke luar topBar, di bawah Reward
+  const existingClaimBtn = document.getElementById('claim-btn');
+  if (existingClaimBtn) existingClaimBtn.remove();
   claimToggle = document.createElement('button');
   claimToggle.id = 'claim-btn';
   claimToggle.innerText = '⚡ Claim';
   claimToggle.setAttribute('data-tooltip', 'Claim your rewards');
   claimToggle.onclick = redeemPoints;
   claimToggle.disabled = true;
-  
-  topBar.append(connectToggle, pointsBadge, rewardBadge, claimToggle);
-  document.body.appendChild(topBar);
+  document.body.appendChild(claimToggle);
 }
 
 function toggleWeb3UI() {
