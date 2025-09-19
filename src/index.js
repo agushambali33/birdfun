@@ -379,8 +379,7 @@ function injectStyles() {
     }
     /* Tooltip */
     .g-toggle::before,
-    .g-badge::before,
-    #claim-btn::before {
+    .g-badge::before {
       content: attr(data-tooltip);
       position: absolute;
       top: -30px;
@@ -398,8 +397,7 @@ function injectStyles() {
       transition: opacity 0.2s;
     }
     .g-toggle:hover::before,
-    .g-badge:hover::before,
-    #claim-btn:hover::before {
+    .g-badge:hover::before {
       opacity: 1;
     }
     /* Animasi */
@@ -464,8 +462,7 @@ function createTopBarUI() {
   
   claimToggle = document.createElement('button');
   claimToggle.id = 'claim-btn';
-  claimToggle.innerText = '⚡ Claim';
-  claimToggle.setAttribute('data-tooltip', 'Claim your rewards');
+  claimToggle.innerText = 'Claim';
   claimToggle.onclick = redeemPoints;
   claimToggle.disabled = true;
   
