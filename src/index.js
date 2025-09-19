@@ -298,8 +298,8 @@ function toggleWeb3UI() {
   if (connectToggle) {
     connectToggle.innerText = (isWalletConnected && playerAddress) ? `✅ ${playerAddress.slice(0,6)}...${playerAddress.slice(-4)}` : '🔗 Connect';
   }
-  if (pointsBadge) pointsBadge.innerText = `🏆 ${bnToNumberSafe(playerPoints)}`;
-  if (rewardBadge) rewardBadge.innerText = `💎 Token ${formatReward(rewardPreview)}`;
+  if (pointsBadge) pointsBadge.innerText = `🏆 Score ${bnToNumberSafe(playerPoints)}`;
+  if (rewardBadge) rewardBadge.innerText = `💎 Reward ${formatReward(rewardPreview)}`;
   if (claimToggle) claimToggle.disabled = !(isWalletConnected && bnToNumberSafe(playerPoints) > 0);
 }
 
