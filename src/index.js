@@ -86,7 +86,10 @@ const showToast = (msg, type = 'info') => {
   t.innerText = msg;
   document.body.appendChild(t);
   setTimeout(() => t.classList.add('show'), 10);
-  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 2400);
+  setTimeout(() => {
+    t.classList.remove('show');
+    setTimeout(() => t.remove(), 300); // Pastikan dihapus dari DOM
+  }, 2400);
 };
 
 /* ====== WEB3 ACTIONS ====== */
@@ -265,13 +268,9 @@ function injectStyles() {
       position: fixed;
       top: 5px;
       left: 5px;
-      right: 5px;
       display: flex;
-      gap: 6px;
       align-items: center;
-      justify-content: center;
       z-index: 9999;
-      flex-wrap: wrap;
     }
     .g-toggle {
       height: 28px;
@@ -296,6 +295,16 @@ function injectStyles() {
     }
     .g-toggle.connected {
       background: linear-gradient(135deg, #32CD32, #228B22);
+    }
+    #web3-info {
+      position: fixed;
+      top: 5px;
+      right: 5px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: flex-end;
+      z-index: 9999;
     }
     .g-badge {
       padding: 5px 8px;
@@ -323,9 +332,6 @@ function injectStyles() {
       color: #00CED1;
     }
     #claim-btn {
-      position: fixed;
-      top: 38px;
-      right: 5px;
       height: 28px;
       padding: 0 10px;
       border-radius: 12px;
@@ -340,7 +346,6 @@ function injectStyles() {
       align-items: center;
       gap: 6px;
       transition: transform 0.2s, border-color 0.3s;
-      z-index: 9999;
     }
     #claim-btn:not([disabled]):hover {
       transform: scale(1.05);
@@ -364,7 +369,7 @@ function injectStyles() {
       z-index: 10000;
       transform: translateX(100%);
       opacity: 0;
-      transition: all .25s ease;
+      transition: all 0.25s ease;
       font-family: 'Press Start 2P', Arial, sans-serif;
       font-size: 10px;
     }
@@ -408,7 +413,7 @@ function injectStyles() {
       100% { transform: scale(1); }
     }
     @media (max-width: 400px) {
-      #game-topbar {
+      #game-topbar, #web3-info {
         gap: 4px;
       }
       .g-toggle, #claim-btn {
@@ -423,9 +428,6 @@ function injectStyles() {
       .game-toast {
         font-size: 8px;
         padding: 5px 8px;
-      }
-      #claim-btn {
-        top: 34px;
       }
     }
   `;
@@ -443,6 +445,13 @@ function createTopBarUI() {
   connectToggle.setAttribute('data-tooltip', 'Connect to MetaMask');
   connectToggle.onclick = () => connectWallet();
   
+  topBar.appendChild(connectToggle);
+  document.body.appendChild(topBar);
+  
+  // Elemen Score, Hbird, Claim di sisi kanan
+  const web3Info = document.createElement('div');
+  web3Info.id = 'web3-info';
+  
   pointsBadge = document.createElement('div');
   pointsBadge.className = 'g-badge points';
   pointsBadge.innerText = '🏆 Score: 0';
@@ -453,19 +462,15 @@ function createTopBarUI() {
   rewardBadge.innerText = '💎 0.00';
   rewardBadge.setAttribute('data-tooltip', 'Your Hbird rewards');
   
-  topBar.append(connectToggle, pointsBadge, rewardBadge);
-  document.body.appendChild(topBar);
-  
-  // Tombol Claim dipindahkan ke luar topBar, di bawah Reward
-  const existingClaimBtn = document.getElementById('claim-btn');
-  if (existingClaimBtn) existingClaimBtn.remove();
   claimToggle = document.createElement('button');
   claimToggle.id = 'claim-btn';
   claimToggle.innerText = '⚡ Claim';
   claimToggle.setAttribute('data-tooltip', 'Claim your rewards');
   claimToggle.onclick = redeemPoints;
   claimToggle.disabled = true;
-  document.body.appendChild(claimToggle);
+  
+  web3Info.append(pointsBadge, rewardBadge, claimToggle);
+  document.body.appendChild(web3Info);
 }
 
 function toggleWeb3UI() {
