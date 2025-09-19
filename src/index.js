@@ -91,110 +91,118 @@ const showToast = (msg, type = 'info') => {
 };
 
 /* ====== WEB3 ACTIONS ====== */
-async function connectWallet() {
+async function connectWallet(silent = false) {
   if (typeof window.ethereum === 'undefined') {
-    showToast('Please install MetaMask!', 'error');
+    if (!silent) showToast('Please install MetaMask!', 'error');
     return;
   }
   try {
-    await ensureCorrectChain();
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: HELIOS_CHAIN_ID_HEX }]
+      });
+    } catch (switchErr) {
+      if (switchErr && switchErr.code === 4902) {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: HELIOS_CHAIN_ID_HEX,
+            chainName: 'Helios Testnet',
+            nativeCurrency: { name: 'Helios', symbol: 'HLS', decimals: 18 },
+            rpcUrls: [HELIOS_RPC],
+            blockExplorerUrls: ['https://explorer.helioschainlabs.org']
+          }]
+        });
+      } else if (!silent) {
+        throw switchErr;
+      }
+    }
 
-    await window.ethereum.request({ method: 'eth_requestAccounts' });
+    let accounts;
+    if (silent) {
+      accounts = await window.ethereum.request({ method: 'eth_accounts' });
+    } else {
+      accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    }
+
+    if (accounts.length === 0) {
+      if (!silent) showToast('No accounts found', 'error');
+      return;
+    }
 
     provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
-    signer = await provider.getSigner();
+    signer = provider.getSigner();
     contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
-    playerAddress = await signer.getAddress();
+    playerAddress = accounts[0];
     isWalletConnected = !!playerAddress;
 
-    await updatePlayerData();
+    try { playerPoints = await contract.playerPoints(playerAddress); } catch {}
+    try { rewardPreview = await contract.getRewardPreview(playerAddress); } catch {}
 
     toggleWeb3UI();
-    showToast('Wallet connected', 'success');
+    if (!silent) showToast('Wallet connected', 'success');
 
     window.ethereum.on('accountsChanged', () => window.location.reload());
     window.ethereum.on('chainChanged', () => window.location.reload());
   } catch (err) {
     console.error('connectWallet error', err);
-    showToast('Connect failed: ' + (err?.message || 'unknown'), 'error');
+    if (!silent) showToast('Connect failed: ' + (err?.message || 'unknown'), 'error');
   }
 }
 
-async function ensureCorrectChain() {
-  try {
-    await window.ethereum.request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: HELIOS_CHAIN_ID_HEX }]
-    });
-  } catch (switchErr) {
-    if (switchErr.code === 4902) {
-      await window.ethereum.request({
-        method: 'wallet_addEthereumChain',
-        params: [{
-          chainId: HELIOS_CHAIN_ID_HEX,
-          chainName: 'Helios Testnet',
-          nativeCurrency: { name: 'Helios', symbol: 'HLS', decimals: 18 },
-          rpcUrls: [HELIOS_RPC],
-          blockExplorerUrls: ['https://explorer.helioschainlabs.org']
-        }]
+async function autoConnectWallet() {
+  await connectWallet(true);
+}
+
+function submitScoreToBlockchain(score) {
+  if (!contract || !isWalletConnected) return;
+  if (score <= 0) return;
+  (async () => {
+    try {
+      showToast('Submitting score...', 'loading');
+      const tx = await contract.submitPoints(score, { gasLimit: 300000 });
+      tx.wait().then(async () => {
+        try { playerPoints = await contract.playerPoints(playerAddress); } catch {}
+        try { rewardPreview = await contract.getRewardPreview(playerAddress); } catch {}
+        toggleWeb3UI();
+        showToast(`Score ${score} submitted`, 'success');
+      }).catch(err => {
+        console.error('submit wait error', err);
+        showToast('Submit failed', 'error');
       });
-    } else {
-      throw switchErr;
+    } catch (err) {
+      console.error('submitScore error', err);
+      showToast(err?.message || 'Submit failed', 'error');
     }
-  }
+  })();
 }
 
-async function updatePlayerData() {
-  try {
-    playerPoints = await contract.playerPoints(playerAddress) || ethers.BigNumber.from(0);
-    rewardPreview = await contract.getRewardPreview(playerAddress) || ethers.BigNumber.from(0);
-  } catch (err) {
-    console.error('updatePlayerData error', err);
-  }
-}
-
-async function submitScoreToBlockchain(score) {
-  if (!isWalletConnected || score <= 0) return;
-  try {
-    await ensureCorrectChain();
-    provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
-    signer = await provider.getSigner();
-    contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-
-    showToast('Submitting score...', 'loading');
-    const tx = await contract.submitPoints(score, { gasLimit: 300000 });
-    await tx.wait();
-    await updatePlayerData();
-    toggleWeb3UI();
-    showToast(`Score ${score} submitted`, 'success');
-  } catch (err) {
-    console.error('submitScore error', err);
-    showToast(err?.message || 'Submit failed', 'error');
-  }
-}
-
-async function redeemPoints() {
-  if (!isWalletConnected || bnToNumberSafe(playerPoints) <= 0) {
+function redeemPoints() {
+  if (!contract || !isWalletConnected) return;
+  if (bnToNumberSafe(playerPoints) <= 0) {
     showToast('No points to claim', 'warning');
     return;
   }
-  try {
-    await ensureCorrectChain();
-    provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
-    signer = await provider.getSigner();
-    contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-
-    showToast('Claiming...', 'loading');
-    const tx = await contract.redeem({ gasLimit: 300000 });
-    await tx.wait();
-    await updatePlayerData();
-    toggleWeb3UI();
-    showToast('Claimed!', 'success');
-  } catch (err) {
-    console.error('redeem error', err);
-    showToast(err?.message || 'Claim failed', 'error');
-  }
+  (async () => {
+    try {
+      showToast('Claiming...', 'loading');
+      const tx = await contract.redeem({ gasLimit: 300000 });
+      tx.wait().then(async () => {
+        try { playerPoints = await contract.playerPoints(playerAddress); } catch {}
+        try { rewardPreview = await contract.getRewardPreview(playerAddress); } catch {}
+        toggleWeb3UI();
+        showToast('Claimed!', 'success');
+      }).catch(err => {
+        console.error('claim wait error', err);
+        showToast('Claim failed', 'error');
+      });
+    } catch (err) {
+      console.error('redeem error', err);
+      showToast(err?.message || 'Claim failed', 'error');
+    }
+  })();
 }
 
 /* ====== UI ====== */
@@ -216,7 +224,7 @@ function injectStyles() {
 function createTopBarUI() {
   if (document.getElementById('game-topbar')) return;
   topBar = document.createElement('div'); topBar.id = 'game-topbar';
-  connectToggle = document.createElement('button'); connectToggle.className = 'g-toggle'; connectToggle.innerText = '🔗 Connect'; connectToggle.onclick = connectWallet;
+  connectToggle = document.createElement('button'); connectToggle.className = 'g-toggle'; connectToggle.innerText = '🔗 Connect'; connectToggle.onclick = () => connectWallet();
   pointsBadge = document.createElement('div'); pointsBadge.className = 'g-badge'; pointsBadge.innerText = '⭐ 0';
   rewardBadge = document.createElement('div'); rewardBadge.className = 'g-badge'; rewardBadge.innerText = '💎 0.00';
   topBar.append(connectToggle, pointsBadge, rewardBadge); document.body.appendChild(topBar);
@@ -266,6 +274,7 @@ const sketch = p5 => {
   p5.setup = () => {
     p5.createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT); p5.frameRate(60);
     injectStyles(); createTopBarUI(); toggleWeb3UI();
+    autoConnectWallet();
     resetGame();
     p5.canvas.addEventListener('touchstart', e => { e.preventDefault(); handleInput(); }, { passive: false });
     p5.canvas.addEventListener('mousedown', e => { handleInput(); });
@@ -295,10 +304,9 @@ const sketch = p5 => {
     if (p5.frameCount % 60 === 0) {
       (async () => {
         try {
-          if (isWalletConnected && playerAddress) {
-            // Use read-only for periodic updates
-            playerPoints = await contractReadOnly.playerPoints(playerAddress).catch(()=>ethers.BigNumber.from(0));
-            rewardPreview = await contractReadOnly.getRewardPreview(playerAddress).catch(()=>ethers.BigNumber.from(0));
+          if (isWalletConnected && contract && playerAddress) {
+            playerPoints = await contract.playerPoints(playerAddress).catch(()=>ethers.BigNumber.from(0));
+            rewardPreview = await contract.getRewardPreview(playerAddress).catch(()=>ethers.BigNumber.from(0));
           }
         } catch {}
         toggleWeb3UI();
