@@ -1,5 +1,4 @@
-// index.js (FULL FINAL, non-blocking TX)
-// Tetap gunakan asset & path sesuai project kamu
+// index.js (FULL FINAL, non-blocking TX, dengan UI baru)
 import './main.scss';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './game/constants';
 import Pipe from './game/pipe';
@@ -176,12 +175,10 @@ async function ensureWalletConnected() {
     }
   }
   try {
-    // Periksa ulang chain dan signer
     const network = await provider.getNetwork();
     if (network.chainId !== HELIOS_CHAIN_ID) {
       await connectWallet(true);
     }
-    // Pastikan signer masih valid
     await signer.getAddress();
     return true;
   } catch (err) {
@@ -233,7 +230,7 @@ async function redeemPoints() {
 
       while (attempts < maxAttempts && !success) {
         try {
-          const tx = await contract.redeem({ gasLimit: 500000 }); // Naikkan gas limit
+          const tx = await contract.redeem({ gasLimit: 500000 });
           await tx.wait();
           success = true;
           try { playerPoints = await contract.playerPoints(playerAddress); } catch {}
@@ -247,8 +244,8 @@ async function redeemPoints() {
             showToast(err?.message || 'Claim failed', 'error');
           } else {
             showToast('Retrying claim...', 'loading');
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Delay sebelum retry
-            await ensureWalletConnected(); // Reinisialisasi wallet
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            await ensureWalletConnected();
           }
         }
       }
@@ -264,43 +261,223 @@ function injectStyles() {
   const s = document.createElement('style');
   s.innerHTML = `
     @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-    #game-topbar { position: fixed; top: 10px; left: 10px; right: 10px; display: flex; gap: 8px; align-items: center; z-index: 9999; flex-wrap: wrap; }
-    .g-toggle { height: 34px; padding: 0 12px; border-radius: 16px; border: none; background: linear-gradient(135deg,#6b7280,#111827); color: #fff; font-size: 12px; font-weight: 700; font-family: 'Press Start 2P', Arial, sans-serif; display: inline-flex; align-items: center; gap:8px; cursor: pointer; }
-    .g-badge { padding: 6px 10px; border-radius: 12px; background: rgba(0,0,0,0.55); color: #fff; font-size: 12px; font-weight: 700; font-family: 'Press Start 2P', Arial, sans-serif; }
-    #claim-btn { position: fixed; top: 60px; right: 10px; width: 120px; height: 36px; border-radius: 18px; border: none; background: linear-gradient(135deg,#FFD54F,#FF8A00); color: #000; font-weight: 800; font-size: 12px; font-family: 'Press Start 2P', Arial, sans-serif; cursor: pointer; }
-    #claim-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
-    .game-toast { position: fixed; top: 100px; right: 12px; background: rgba(0,0,0,0.9); color: #fff; padding: 8px 12px; border-radius: 8px; z-index: 10000; transform: translateX(100%); opacity: 0; transition: all .25s ease; font-family: 'Press Start 2P', Arial, sans-serif; font-size: 11px; }
-    .game-toast.show { transform: translateX(0); opacity: 1; }
+    #game-topbar {
+      position: fixed;
+      top: 5px;
+      left: 5px;
+      right: 5px;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      flex-wrap: wrap;
+    }
+    .g-toggle {
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 12px;
+      border: 2px solid #fff;
+      background: linear-gradient(135deg, #00CED1, #20B2AA);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      font-family: 'Press Start 2P', Arial, sans-serif;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: transform 0.2s, border-color 0.3s;
+      position: relative;
+    }
+    .g-toggle:hover {
+      transform: scale(1.05);
+      border-color: #FFD700;
+    }
+    .g-toggle.connected {
+      background: linear-gradient(135deg, #32CD32, #228B22);
+    }
+    .g-badge {
+      padding: 5px 8px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      font-family: 'Press Start 2P', Arial, sans-serif;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      position: relative;
+    }
+    .g-badge.points {
+      background: linear-gradient(135deg, #FFD700, #FFA500);
+    }
+    .g-badge.points.updated {
+      animation: shine 1s ease-in-out;
+    }
+    .g-badge.reward::after {
+      content: 'HLS';
+      font-size: 8px;
+      margin-left: 4px;
+      color: #00CED1;
+    }
+    #claim-btn {
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 12px;
+      border: 2px solid #fff;
+      background: linear-gradient(135deg, #FFD54F, #FF8A00);
+      color: #000;
+      font-weight: 800;
+      font-size: 10px;
+      font-family: 'Press Start 2P', Arial, sans-serif;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: transform 0.2s, border-color 0.3s;
+    }
+    #claim-btn:not([disabled]):hover {
+      transform: scale(1.05);
+      border-color: #FFD700;
+    }
+    #claim-btn:not([disabled]) {
+      animation: pulse 2s infinite;
+    }
+    #claim-btn[disabled] {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .game-toast {
+      position: fixed;
+      top: 80px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.9);
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 6px;
+      z-index: 10000;
+      transform: translateX(100%);
+      opacity: 0;
+      transition: all .25s ease;
+      font-family: 'Press Start 2P', Arial, sans-serif;
+      font-size: 10px;
+    }
+    .game-toast.show {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    /* Tooltip */
+    .g-toggle::before,
+    .g-badge::before,
+    #claim-btn::before {
+      content: attr(data-tooltip);
+      position: absolute;
+      top: -30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.9);
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 8px;
+      font-family: 'Press Start 2P', Arial, sans-serif;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .g-toggle:hover::before,
+    .g-badge:hover::before,
+    #claim-btn:hover::before {
+      opacity: 1;
+    }
+    /* Animasi */
+    @keyframes shine {
+      0% { background-position: 200% center; }
+      100% { background-position: 0 center; }
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+    @media (max-width: 400px) {
+      #game-topbar {
+        gap: 4px;
+      }
+      .g-toggle, #claim-btn {
+        height: 24px;
+        font-size: 8px;
+        padding: 0 8px;
+      }
+      .g-badge {
+        font-size: 8px;
+        padding: 4px 6px;
+      }
+      .game-toast {
+        font-size: 8px;
+        padding: 5px 8px;
+      }
+    }
   `;
   document.head.appendChild(s);
 }
 
 function createTopBarUI() {
   if (document.getElementById('game-topbar')) return;
-  topBar = document.createElement('div'); topBar.id = 'game-topbar';
-  connectToggle = document.createElement('button'); connectToggle.className = 'g-toggle'; connectToggle.innerText = '🔗 Connect'; connectToggle.onclick = () => connectWallet();
-  pointsBadge = document.createElement('div'); pointsBadge.className = 'g-badge'; pointsBadge.innerText = '🏆 0';
-  rewardBadge = document.createElement('div'); rewardBadge.className = 'g-badge'; rewardBadge.innerText = '💎 0.00';
-  topBar.append(connectToggle, pointsBadge, rewardBadge); document.body.appendChild(topBar);
+  topBar = document.createElement('div');
+  topBar.id = 'game-topbar';
   
-  // Pastikan tombol claim dibuat ulang untuk menghindari event listener ganda
-  const existingClaimBtn = document.getElementById('claim-btn');
-  if (existingClaimBtn) existingClaimBtn.remove();
-  claimToggle = document.createElement('button'); 
-  claimToggle.id = 'claim-btn'; 
-  claimToggle.innerText = 'Claim'; 
-  claimToggle.onclick = redeemPoints; 
+  connectToggle = document.createElement('button');
+  connectToggle.className = 'g-toggle';
+  connectToggle.innerText = '🦊 Connect Wallet';
+  connectToggle.setAttribute('data-tooltip', 'Connect to MetaMask');
+  connectToggle.onclick = () => connectWallet();
+  
+  pointsBadge = document.createElement('div');
+  pointsBadge.className = 'g-badge points';
+  pointsBadge.innerText = '🏆 Score: 0';
+  pointsBadge.setAttribute('data-tooltip', 'Your points earned');
+  
+  rewardBadge = document.createElement('div');
+  rewardBadge.className = 'g-badge reward';
+  rewardBadge.innerText = '💎 0.00';
+  rewardBadge.setAttribute('data-tooltip', 'Your HLS rewards');
+  
+  claimToggle = document.createElement('button');
+  claimToggle.id = 'claim-btn';
+  claimToggle.innerText = '⚡ Claim';
+  claimToggle.setAttribute('data-tooltip', 'Claim your rewards');
+  claimToggle.onclick = redeemPoints;
   claimToggle.disabled = true;
-  document.body.appendChild(claimToggle);
+  
+  topBar.append(connectToggle, pointsBadge, rewardBadge, claimToggle);
+  document.body.appendChild(topBar);
 }
 
 function toggleWeb3UI() {
   if (connectToggle) {
-    connectToggle.innerText = (isWalletConnected && playerAddress) ? `✅ ${playerAddress.slice(0,4)}...${playerAddress.slice(-3)}` : '🔗 Connect';
+    connectToggle.innerText = (isWalletConnected && playerAddress)
+      ? `✅ ${playerAddress.slice(0, 4)}...${playerAddress.slice(-4)}`
+      : '🦊 Connect Wallet';
+    connectToggle.classList.toggle('connected', isWalletConnected);
   }
-  if (pointsBadge) pointsBadge.innerText = `🏆  ${bnToNumberSafe(playerPoints)}`;
-  if (rewardBadge) rewardBadge.innerText = `💎 Reward ${formatReward(rewardPreview)}`;
-  if (claimToggle) claimToggle.disabled = !(isWalletConnected && bnToNumberSafe(playerPoints) > 0);
+  if (pointsBadge) {
+    const currentPoints = bnToNumberSafe(playerPoints);
+    pointsBadge.innerText = `🏆 Score: ${currentPoints}`;
+    if (currentPoints > 0) {
+      pointsBadge.classList.add('updated');
+      setTimeout(() => pointsBadge.classList.remove('updated'), 1000);
+    }
+  }
+  if (rewardBadge) {
+    rewardBadge.innerText = `💎 ${formatReward(rewardPreview)}`;
+  }
+  if (claimToggle) {
+    claimToggle.disabled = !(isWalletConnected && bnToNumberSafe(playerPoints) > 0);
+  }
 }
 
 /* ====== P5 GAME ====== */
