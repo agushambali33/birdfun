@@ -37,14 +37,14 @@
 
     .content {
       text-align: center;
-      margin-top: 4px;
+      margin-top: 4px; /* dikurangi sedikit untuk kerapian */
       flex-grow: 0;
       width: 100%;
-      max-width: 400px;
+      max-width: 400px; /* sesuaikan dengan game untuk alignment */
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 6px; /* tambah gap untuk ruang antar elemen */
+      gap: 4px; /* tambah gap antar elemen untuk rapi */
     }
 
     /* Tombol Swap */
@@ -52,41 +52,33 @@
       background: linear-gradient(135deg, #FFD54F, #FF8A00);
       color: #000;
       font-weight: bold;
-      padding: 4px 10px;
-      height: 28px; /* sesuaikan dengan tinggi tombol Claim */
-      line-height: 20px; /* pusatkan teks secara vertikal */
+      padding: 4px 8px; /* dikurangi padding untuk kompak */
       border-radius: 6px;
       text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+      display: inline-block;
       font-size: 10px;
-      transition: background 0.3s, transform 0.2s, box-shadow 0.3s;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      transition: background 0.3s;
     }
 
     .btn-swap:hover {
       background: linear-gradient(135deg, #FF8A00, #FFD54F);
-      transform: scale(1.05);
-      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
     }
 
     /* Contract Address */
     .contract-address {
       display: flex;
       width: 100%;
-      max-width: 360px; /* dilebarin ke 360px untuk rapi */
+      max-width: 320px; /* dilebarin dari 260px ke 320px */
       justify-content: center;
       align-items: center;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); /* tambah shadow */
     }
 
     .contract-address input {
       flex: 1;
-      height: 28px; /* sesuaikan dengan tinggi tombol Claim */
-      padding: 4px 8px;
+      height: 20px;
+      padding: 2px 6px;
       border-radius: 4px 0 0 4px;
-      border: 1px solid #ccc; /* tambah border halus */
+      border: none;
       font-family: monospace;
       font-size: 10px;
       color: #000;
@@ -97,11 +89,10 @@
     }
 
     .contract-address button {
-      height: 28px; /* sesuaikan dengan tinggi tombol Claim */
-      padding: 0 10px;
+      height: 20px;
+      padding: 0 8px;
       border-radius: 0 4px 4px 0;
-      border: 1px solid #ccc; /* tambah border halus */
-      border-left: none; /* hilangkan border kiri agar nyambung */
+      border: none;
       background: #FFD54F;
       color: #000;
       font-weight: bold;
@@ -109,24 +100,22 @@
       font-size: 10px;
       outline: none;
       appearance: none;
-      transition: background 0.3s, transform 0.2s;
+      transition: background 0.3s;
     }
 
     .contract-address button:hover {
-      background: #FFA500;
-      transform: scale(1.05);
+      background: #FFA500; /* tambah hover untuk kerapian */
     }
 
     /* Sosmed */
     .social-icons {
       display: flex;
       justify-content: center;
-      gap: 10px; /* pertahankan jarak renggang */
-      padding-bottom: 4px; /* tambah jarak ke info */
+      gap: 6px; /* gunakan gap untuk rapi antar ikon */
     }
 
     .social-icons a {
-      transition: transform 0.2s, filter 0.2s;
+      transition: transform 0.2s;
     }
 
     .social-icons a img {
@@ -135,72 +124,19 @@
 
     .social-icons a:hover {
       transform: scale(1.1);
-      filter: brightness(1.2); /* efek hover lebih hidup */
     }
 
     /* Info Text */
     .project-info {
       font-size: 9px;
-      opacity: 0.8;
-      margin-top: 1px; /* lebih rapat */
+      opacity: 0.8; /* tingkatkan opacity sedikit untuk visibilitas */
+      margin-top: 2px; /* kurangi margin */
       text-align: center;
-      text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5); /* tambah shadow retro */
     }
 
     .project-info p {
-      margin: 0;
-      line-height: 1.3; /* jarak baris lebih rapi */
-    }
-
-    /* Toast Notification */
-    .game-toast {
-      position: fixed;
-      top: 80px;
-      right: 10px;
-      background: rgba(0, 0, 0, 0.9);
-      color: #fff;
-      padding: 6px 10px;
-      border-radius: 6px;
-      z-index: 10000;
-      transform: translateX(100%);
-      opacity: 0;
-      transition: all 0.25s ease;
-      font-family: 'Press Start 2P', Arial, sans-serif;
-      font-size: 10px;
-    }
-
-    .game-toast.show {
-      transform: translateX(0);
-      opacity: 1;
-    }
-
-    .game-toast.success {
-      background: rgba(50, 205, 50, 0.9); /* hijau untuk sukses */
-    }
-
-    /* Responsivitas */
-    @media (max-width: 400px) {
-      .contract-address {
-        max-width: 90%; /* menyesuaikan lebar di layar kecil */
-      }
-      .btn-swap {
-        padding: 3px 8px;
-        font-size: 9px;
-        height: 24px;
-        line-height: 18px;
-      }
-      .contract-address input,
-      .contract-address button {
-        height: 24px;
-        font-size: 9px;
-        padding: 3px 6px;
-      }
-      .social-icons a img {
-        width: 18px;
-      }
-      .project-info {
-        font-size: 8px;
-      }
+      margin: 0; /* hilangkan margin default p untuk kompak */
+      line-height: 1.2; /* rapihin jarak baris */
     }
   </style>
 </head>
@@ -248,15 +184,7 @@
       const input = document.querySelector('.contract-address input');
       input.select();
       document.execCommand('copy');
-      const toast = document.createElement('div');
-      toast.className = 'game-toast success';
-      toast.innerText = 'Contract address copied!';
-      document.body.appendChild(toast);
-      setTimeout(() => toast.classList.add('show'), 10);
-      setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 300);
-      }, 2400);
+      alert('Contract address copied!');
     }
   </script>
 </body>
