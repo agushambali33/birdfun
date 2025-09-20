@@ -1,4 +1,4 @@
-// index.js (FULL FINAL, non-blocking TX, dengan UI baru)
+// index.js (FULL FINAL, non-blocking TX, dengan UI baru dan integrasi voucher)
 import './main.scss';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './game/constants';
 import Pipe from './game/pipe';
@@ -31,10 +31,11 @@ const HELIOS_RPC = 'https://testnet1.helioschainlabs.org';
 const HELIOS_CHAIN_ID = 42000;
 const HELIOS_CHAIN_ID_HEX = ethers.utils.hexValue(HELIOS_CHAIN_ID);
 
-const CONTRACT_ADDRESS = '0x8bc2324615139B31b9E1861CD31C475980b4dA9e';
+const CONTRACT_ADDRESS = '0x3b807e75c5b3719b76d3ae0e4b3c9f02984f2f41'; // Contract baru
+const VOUCHER_ENDPOINT = 'https://birdfunbackend.vercel.app/sign';
 const CONTRACT_ABI = [
   "function submitPoints(uint256 _points) external",
-  "function redeem() external",
+  "function redeemVoucher(address player, uint256 points, uint256 amount, uint256 nonce, uint256 expiry, bytes signature) external",
   "function playerPoints(address) external view returns (uint256)",
   "function getRewardPreview(address) external view returns (uint256)",
   "function getPoolBalance() external view returns (uint256)"
@@ -88,7 +89,7 @@ const showToast = (msg, type = 'info') => {
   setTimeout(() => t.classList.add('show'), 10);
   setTimeout(() => {
     t.classList.remove('show');
-    setTimeout(() => t.remove(), 300); // Pastikan dihapus dari DOM
+    setTimeout(() => t.remove(), 300);
   }, 2400);
 };
 
@@ -226,20 +227,40 @@ async function redeemPoints() {
       const connected = await ensureWalletConnected();
       if (!connected) return;
 
-      showToast('Claiming...', 'loading');
+      showToast('Fetching voucher...', 'loading');
+      // Panggil endpoint /sign
+      const response = await fetch(
+        `${VOUCHER_ENDPOINT}?player=${playerAddress}&points=${bnToNumberSafe(playerPoints)}&amountTokens=1&nonce=0&contractAddress=${CONTRACT_ADDRESS}`
+      );
+      const voucher = await response.json();
+
+      if (!voucher.success) {
+        showToast('Failed to get voucher', 'error');
+        return;
+      }
+
+      showToast('Claiming voucher...', 'loading');
       let attempts = 0;
       const maxAttempts = 2;
       let success = false;
 
       while (attempts < maxAttempts && !success) {
         try {
-          const tx = await contract.redeem({ gasLimit: 500000 });
+          const tx = await contract.redeemVoucher(
+            voucher.player,
+            voucher.points,
+            voucher.amountWei,
+            voucher.nonce,
+            voucher.expiry,
+            voucher.signature,
+            { gasLimit: 500000 }
+          );
           await tx.wait();
           success = true;
           try { playerPoints = await contract.playerPoints(playerAddress); } catch {}
           try { rewardPreview = await contract.getRewardPreview(playerAddress); } catch {}
           toggleWeb3UI();
-          showToast('Claimed!', 'success');
+          showToast('Voucher claimed!', 'success');
         } catch (err) {
           attempts++;
           console.error(`redeem attempt ${attempts} error`, err);
@@ -253,7 +274,7 @@ async function redeemPoints() {
         }
       }
     } catch (err) {
-      console.error('redeem error', err);
+      console.error('redeemPoints error', err);
       showToast(err?.message || 'Claim failed', 'error');
     }
   })();
