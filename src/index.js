@@ -1,4 +1,4 @@
-// index.js (FULL FINAL, non-blocking TX, dengan UI baru dan voucher-only)
+// index.js (FULL FINAL, non-blocking TX, dengan UI baru)
 import './main.scss';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './game/constants';
 import Pipe from './game/pipe';
@@ -213,10 +213,14 @@ async function redeemPoints() {
       const response = await fetch(
         `${VOUCHER_ENDPOINT}?player=${playerAddress}&points=${playerScore}&amountTokens=${(playerScore * 0.1).toString()}&nonce=${nonce}&contractAddress=${CONTRACT_ADDRESS}`
       );
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       const voucher = await response.json();
 
       if (!voucher.success) {
-        showToast('Failed to get voucher', 'error');
+        showToast('Failed to get voucher: Invalid response', 'error');
+        console.error('Invalid voucher response:', voucher);
         return;
       }
 
@@ -255,7 +259,7 @@ async function redeemPoints() {
       }
     } catch (err) {
       console.error('redeemPoints error', err);
-      showToast(err?.message || 'Claim failed', 'error');
+      showToast('Failed to fetch voucher: ' + (err?.message || 'unknown'), 'error');
     }
   })();
 }
@@ -487,7 +491,7 @@ function toggleWeb3UI() {
     }
   }
   if (rewardBadge) {
-    rewardBadge.innerText = ` ${formatReward(rewardPreview)}`;
+    rewardBadge.innerText = ` ${(playerScore * 0.1).toFixed(2)}`; // Rate 1 point = 0.1 Hbird
   }
   if (claimToggle) {
     claimToggle.disabled = !(isWalletConnected && bnToNumberSafe(playerScore) > 0);
@@ -512,7 +516,7 @@ const sketch = p5 => {
     gameButton = new Button(p5, gameText, spriteImage);
     storage = new Storage(); score = 0; pipe.generateFirst();
     const data = storage.getStorageData(); bestScore = data?.bestScore || 0;
-    // Jangan reset playerScore, biar accumulate
+    // Tidak reset playerScore, biar accumulate
   };
 
   const handleInput = () => {
@@ -542,7 +546,7 @@ const sketch = p5 => {
       gameOver = pipe.checkCrash(bird) || bird.isDead();
       if (gameOver) {
         dieAudio.currentTime = 0; dieAudio.play();
-        playerScore += score; // Accumulate score lokal
+        playerScore += score; // Accumulate points lokal
         toggleWeb3UI();
       }
       if (pipe.getScore(bird)) { score++; pointAudio.currentTime = 0; pointAudio.play(); }
@@ -560,12 +564,12 @@ const sketch = p5 => {
       (async () => {
         try {
           if (isWalletConnected && contract && playerAddress) {
-            // No playerPoints from contract, use local playerScore
-            rewardPreview = ethers.utils.parseUnits((playerScore * 0.1).toString(), 18);
+            // Estimasi reward lokal
             toggleWeb3UI();
           }
         } catch {}
       })();
+    }
   };
 
   p5.keyPressed = e => {
