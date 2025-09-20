@@ -50,8 +50,7 @@ let contractReadOnly = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provi
 /* ====== STATE ====== */
 let isWalletConnected = false;
 let playerAddress = null;
-let playerScore = 0; // Ganti playerPoints jadi score lokal
-let rewardPreview = ethers.BigNumber.from(0);
+let playerScore = 0; // Accumulate points lokal
 
 /* ====== UI ELEMENTS ====== */
 let topBar, connectToggle, pointsBadge, rewardBadge, claimToggle;
@@ -212,7 +211,7 @@ async function redeemPoints() {
       showToast('Fetching voucher...', 'loading');
       const nonce = await getNextNonce();
       const response = await fetch(
-        `${VOUCHER_ENDPOINT}?player=${playerAddress}&points=${playerScore}&amountTokens=1&nonce=${nonce}&contractAddress=${CONTRACT_ADDRESS}`
+        `${VOUCHER_ENDPOINT}?player=${playerAddress}&points=${playerScore}&amountTokens=${(playerScore * 0.1).toString()}&nonce=${nonce}&contractAddress=${CONTRACT_ADDRESS}`
       );
       const voucher = await response.json();
 
@@ -239,7 +238,7 @@ async function redeemPoints() {
           );
           await tx.wait();
           success = true;
-          playerScore = 0; // Reset score lokal setelah claim
+          playerScore = 0; // Reset score lokal setelah claim sukses
           toggleWeb3UI();
           showToast('Voucher claimed!', 'success');
         } catch (err) {
@@ -480,17 +479,18 @@ function toggleWeb3UI() {
     connectToggle.classList.toggle('connected', isWalletConnected);
   }
   if (pointsBadge) {
-    pointsBadge.innerText = `🏆 Score: ${playerScore}`;
-    if (playerScore > 0) {
+    const currentPoints = bnToNumberSafe(playerScore);
+    pointsBadge.innerText = `🏆 Score: ${currentPoints}`;
+    if (currentPoints > 0) {
       pointsBadge.classList.add('updated');
       setTimeout(() => pointsBadge.classList.remove('updated'), 1000);
     }
   }
   if (rewardBadge) {
-    rewardBadge.innerText = ` ${formatReward(playerScore > 0 ? ethers.utils.parseUnits('1', 18) : 0)}`;
+    rewardBadge.innerText = ` ${formatReward(rewardPreview)}`;
   }
   if (claimToggle) {
-    claimToggle.disabled = !(isWalletConnected && playerScore > 0);
+    claimToggle.disabled = !(isWalletConnected && bnToNumberSafe(playerScore) > 0);
   }
 }
 
@@ -512,8 +512,7 @@ const sketch = p5 => {
     gameButton = new Button(p5, gameText, spriteImage);
     storage = new Storage(); score = 0; pipe.generateFirst();
     const data = storage.getStorageData(); bestScore = data?.bestScore || 0;
-    playerScore = 0; // Reset score lokal
-    toggleWeb3UI();
+    // Jangan reset playerScore, biar accumulate
   };
 
   const handleInput = () => {
@@ -543,7 +542,7 @@ const sketch = p5 => {
       gameOver = pipe.checkCrash(bird) || bird.isDead();
       if (gameOver) {
         dieAudio.currentTime = 0; dieAudio.play();
-        playerScore = score; // Simpan score lokal saat game over
+        playerScore += score; // Accumulate score lokal
         toggleWeb3UI();
       }
       if (pipe.getScore(bird)) { score++; pointAudio.currentTime = 0; pointAudio.play(); }
@@ -556,6 +555,17 @@ const sketch = p5 => {
       if (score > bestScore) { bestScore = score; storage.setStorageData({ bestScore: score }); }
       gameText.gameOverText(score, bestScore, level); gameButton.resetButton();
     } else gameText.scoreText(score, level);
+
+    if (p5.frameCount % 60 === 0) {
+      (async () => {
+        try {
+          if (isWalletConnected && contract && playerAddress) {
+            // No playerPoints from contract, use local playerScore
+            rewardPreview = ethers.utils.parseUnits((playerScore * 0.1).toString(), 18);
+            toggleWeb3UI();
+          }
+        } catch {}
+      })();
   };
 
   p5.keyPressed = e => {
