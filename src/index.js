@@ -1,4 +1,4 @@
-// index.js (FULL FINAL, non-blocking TX, dengan UI baru dan voucher-only)
+// index.js (FULL FINAL dengan Web3 + Voucher Integration)
 import './main.scss';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './game/constants';
 import Pipe from './game/pipe';
@@ -32,7 +32,6 @@ const HELIOS_CHAIN_ID = 42000;
 const HELIOS_CHAIN_ID_HEX = ethers.utils.hexValue(HELIOS_CHAIN_ID);
 
 const CONTRACT_ADDRESS = '0x3b807e75c5b3719b76d3ae0e4b3c9f02984f2f41';
-// NOTE: sign.js deployed at Vercel as /api/sign (your example used this)
 const VOUCHER_ENDPOINT = 'https://birdfunbackend.vercel.app/api/sign';
 const CONTRACT_ABI = [
   "function redeemVoucher(address player, uint256 points, uint256 amount, uint256 nonce, uint256 expiry, bytes signature) external",
@@ -51,29 +50,18 @@ let contractReadOnly = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provi
 /* ====== STATE ====== */
 let isWalletConnected = false;
 let playerAddress = null;
-let playerScore = 0; // menyimpan poin sampai di-claim
+let playerScore = 0; // poin terkumpul (tidak hilang saat mati)
 let rewardPreview = ethers.BigNumber.from(0);
 
 /* ====== UI ELEMENTS ====== */
 let topBar, connectToggle, pointsBadge, rewardBadge, claimToggle;
 
 /* ====== HELPERS ====== */
-const bnToNumberSafe = (bn) => {
+const formatReward = (points) => {
   try {
-    if (!bn) return 0;
-    if (typeof bn.toNumber === 'function') return bn.toNumber();
-    return Number(bn) || 0;
+    return ethers.utils.formatUnits(ethers.BigNumber.from(points).mul(ethers.BigNumber.from(10).pow(18)), 18);
   } catch {
-    try { return Number(bn.toString()); } catch { return 0; }
-  }
-};
-
-const formatReward = (bn) => {
-  try {
-    if (!bn) return '0.00';
-    return Number(ethers.utils.formatEther(bn)).toFixed(2);
-  } catch {
-    try { return (Number(bn) / 1e18).toFixed(2); } catch { return '0.00'; }
+    return "0.00";
   }
 };
 
@@ -191,7 +179,6 @@ async function ensureWalletConnected() {
 async function getNextNonce() {
   let nonce = 0;
   try {
-    // cari nonce pertama yang belum dipakai untuk address ini
     while (await contractReadOnly.usedNonces(playerAddress, nonce)) {
       nonce++;
     }
@@ -213,55 +200,31 @@ async function redeemPoints() {
 
       showToast('Fetching voucher...', 'loading');
       const nonce = await getNextNonce();
-
-      // Note: we do NOT send amountTokens here. Backend calculates tokenAmount using 1 point = 1 Hbird.
       const response = await fetch(
         `${VOUCHER_ENDPOINT}?player=${playerAddress}&points=${playerScore}&nonce=${nonce}&contractAddress=${CONTRACT_ADDRESS}`
       );
       const voucher = await response.json();
 
-      if (!voucher || !voucher.success) {
-        console.error('voucher response:', voucher);
+      if (!voucher.success) {
         showToast('Failed to get voucher', 'error');
         return;
       }
 
       showToast('Claiming voucher...', 'loading');
-      let attempts = 0;
-      const maxAttempts = 2;
-      let success = false;
+      const tx = await contract.redeemVoucher(
+        voucher.player,
+        voucher.points,
+        voucher.amountWei,
+        voucher.nonce,
+        voucher.expiry,
+        voucher.signature,
+        { gasLimit: 500000 }
+      );
+      await tx.wait();
 
-      while (attempts < maxAttempts && !success) {
-        try {
-          const tx = await contract.redeemVoucher(
-            voucher.player,
-            voucher.points,
-            voucher.amountWei, // BigNumber string from backend
-            voucher.nonce,
-            voucher.expiry,
-            voucher.signature,
-            { gasLimit: 500000 }
-          );
-          await tx.wait();
-          success = true;
-
-          // Reset only after successful on-chain claim
-          playerScore = 0;
-          toggleWeb3UI();
-          showToast('Voucher claimed!', 'success');
-        } catch (err) {
-          attempts++;
-          console.error(`redeem attempt ${attempts} error`, err);
-          if (attempts === maxAttempts) {
-            showToast(err?.message || 'Claim failed', 'error');
-          } else {
-            showToast('Retrying claim...', 'loading');
-            // small wait then re-ensure wallet connection
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            await ensureWalletConnected();
-          }
-        }
-      }
+      playerScore = 0; // Reset setelah sukses claim
+      toggleWeb3UI();
+      showToast('Voucher claimed!', 'success');
     } catch (err) {
       console.error('redeemPoints error', err);
       showToast(err?.message || 'Claim failed', 'error');
@@ -275,169 +238,26 @@ function injectStyles() {
   s.innerHTML = `
     @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
     #game-topbar {
-      position: fixed;
-      top: 5px;
-      left: 5px;
-      display: flex;
-      align-items: center;
-      z-index: 9999;
+      position: fixed; top: 5px; left: 5px; display: flex; align-items: center; z-index: 9999;
     }
     .g-toggle {
-      height: 28px;
-      padding: 0 10px;
-      border-radius: 12px;
-      border: 2px solid #fff;
-      background: linear-gradient(135deg, #00CED1, #20B2AA);
-      color: #fff;
-      font-size: 10px;
-      font-weight: 700;
-      font-family: 'Press Start 2P', Arial, sans-serif;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      cursor: pointer;
-      transition: transform 0.2s, border-color 0.3s;
-      position: relative;
+      height: 28px; padding: 0 10px; border-radius: 12px; border: 2px solid #fff;
+      background: linear-gradient(135deg, #00CED1, #20B2AA); color: #fff; font-size: 10px;
+      font-weight: 700; font-family: 'Press Start 2P', Arial, sans-serif;
+      display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
     }
-    .g-toggle:hover {
-      transform: scale(1.05);
-      border-color: #FFD700;
-    }
-    .g-toggle.connected {
-      background: linear-gradient(135deg, #32CD32, #228B22);
-    }
-    #web3-info {
-      position: fixed;
-      top: 5px;
-      right: 5px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      align-items: flex-end;
-      z-index: 9999;
-    }
-    .g-badge {
-      padding: 5px 8px;
-      border-radius: 10px;
-      background: rgba(0, 0, 0, 0.7);
-      color: #fff;
-      font-size: 10px;
-      font-weight: 700;
-      font-family: 'Press Start 2P', Arial, sans-serif;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      position: relative;
-    }
-    .g-badge.points {
-      background: linear-gradient(135deg, #FFD700, #FFA500);
-    }
-    .g-badge.points.updated {
-      animation: shine 1s ease-in-out;
-    }
-    .g-badge.reward::after {
-      content: 'Hbird';
-      font-size: 8px;
-      margin-left: 4px;
-      color: #00CED1;
-    }
-    #claim-btn {
-      height: 28px;
-      padding: 0 10px;
-      border-radius: 12px;
-      border: 2px solid #fff;
-      background: linear-gradient(135deg, #FFD54F, #FF8A00);
-      color: #000;
-      font-weight: 800;
-      font-size: 10px;
-      font-family: 'Press Start 2P', Arial, sans-serif;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      transition: transform 0.2s, border-color 0.3s;
-    }
-    #claim-btn:not([disabled]):hover {
-      transform: scale(1.05);
-      border-color: #FFD700;
-    }
-    #claim-btn:not([disabled]) {
-      animation: pulse 2s infinite;
-    }
-    #claim-btn[disabled] {
-      opacity: 0.55;
-      cursor: not-allowed;
-    }
-    .game-toast {
-      position: fixed;
-      top: 80px;
-      right: 10px;
-      background: rgba(0, 0, 0, 0.9);
-      color: #fff;
-      padding: 6px 10px;
-      border-radius: 6px;
-      z-index: 10000;
-      transform: translateX(100%);
-      opacity: 0;
-      transition: all 0.25s ease;
-      font-family: 'Press Start 2P', Arial, sans-serif;
-      font-size: 10px;
-    }
-    .game-toast.show {
-      transform: translateX(0);
-      opacity: 1;
-    }
-    /* Tooltip */
-    .g-toggle::before,
-    .g-badge::before {
-      content: attr(data-tooltip);
-      position: absolute;
-      top: -30px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.9);
-      color: #fff;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 8px;
-      font-family: 'Press Start 2P', Arial, sans-serif;
-      white-space: nowrap;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s;
-    }
-    .g-toggle:hover::before,
-    .g-badge:hover::before {
-      opacity: 1;
-    }
-    /* Animasi */
-    @keyframes shine {
-      0% { background-position: 200% center; }
-      100% { background-position: 0 center; }
-    }
-    @keyframes pulse {
-      0% { transform: scale(1); }
-      50% { transform: scale(1.1); }
-      100% { transform: scale(1); }
-    }
-    @media (max-width: 400px) {
-      #game-topbar, #web3-info {
-        gap: 4px;
-      }
-      .g-toggle, #claim-btn {
-        height: 24px;
-        font-size: 8px;
-        padding: 0 8px;
-      }
-      .g-badge {
-        font-size: 8px;
-        padding: 4px 6px;
-      }
-      .game-toast {
-        font-size: 8px;
-        padding: 5px 8px;
-      }
-    }
+    .g-toggle.connected { background: linear-gradient(135deg, #32CD32, #228B22); }
+    #web3-info { position: fixed; top: 5px; right: 5px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; z-index: 9999; }
+    .g-badge { padding: 5px 8px; border-radius: 10px; background: rgba(0, 0, 0, 0.7); color: #fff;
+      font-size: 10px; font-weight: 700; font-family: 'Press Start 2P', Arial, sans-serif; display: inline-flex; gap: 4px; }
+    .g-badge.points { background: linear-gradient(135deg, #FFD700, #FFA500); }
+    .g-badge.reward::after { content: ' Hbird'; font-size: 8px; margin-left: 4px; color: #00CED1; }
+    #claim-btn { height: 28px; padding: 0 10px; border-radius: 12px; border: 2px solid #fff;
+      background: linear-gradient(135deg, #FFD54F, #FF8A00); color: #000; font-weight: 800;
+      font-size: 10px; font-family: 'Press Start 2P', Arial, sans-serif; cursor: pointer; }
+    #claim-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+    .game-toast { position: fixed; top: 80px; right: 10px; background: rgba(0, 0, 0, 0.9); color: #fff;
+      padding: 6px 10px; border-radius: 6px; z-index: 10000; font-family: 'Press Start 2P'; font-size: 10px; }
   `;
   document.head.appendChild(s);
 }
@@ -450,25 +270,21 @@ function createTopBarUI() {
   connectToggle = document.createElement('button');
   connectToggle.className = 'g-toggle';
   connectToggle.innerText = '🦊 Connect Wallet';
-  connectToggle.setAttribute('data-tooltip', 'Connect to MetaMask');
   connectToggle.onclick = () => connectWallet();
   
   topBar.appendChild(connectToggle);
   document.body.appendChild(topBar);
   
-  // Elemen Score, Hbird, Claim di sisi kanan
   const web3Info = document.createElement('div');
   web3Info.id = 'web3-info';
   
   pointsBadge = document.createElement('div');
   pointsBadge.className = 'g-badge points';
   pointsBadge.innerText = '🏆 Score: 0';
-  pointsBadge.setAttribute('data-tooltip', 'Your points earned');
   
   rewardBadge = document.createElement('div');
   rewardBadge.className = 'g-badge reward';
-  rewardBadge.innerText = ' 0.00';
-  rewardBadge.setAttribute('data-tooltip', 'Estimated Hbird rewards');
+  rewardBadge.innerText = '0.00';
   
   claimToggle = document.createElement('button');
   claimToggle.id = 'claim-btn';
@@ -489,14 +305,9 @@ function toggleWeb3UI() {
   }
   if (pointsBadge) {
     pointsBadge.innerText = `🏆 Score: ${playerScore}`;
-    if (playerScore > 0) {
-      pointsBadge.classList.add('updated');
-      setTimeout(() => pointsBadge.classList.remove('updated'), 1000);
-    }
   }
   if (rewardBadge) {
-    // Show reward = playerScore Hbird (1 point = 1 Hbird)
-    rewardBadge.innerText = ` ${formatReward(playerScore > 0 ? ethers.utils.parseUnits(playerScore.toString(), 18) : 0)}`;
+    rewardBadge.innerText = `${formatReward(playerScore)}`;
   }
   if (claimToggle) {
     claimToggle.disabled = !(isWalletConnected && playerScore > 0);
@@ -520,9 +331,6 @@ const sketch = p5 => {
     floor = new Floor(p5, spriteImage); gameText = new Text(p5, birdyFont);
     gameButton = new Button(p5, gameText, spriteImage);
     storage = new Storage(); score = 0; pipe.generateFirst();
-    const data = storage.getStorageData(); bestScore = data?.bestScore || 0;
-    // IMPORTANT: jangan reset playerScore di sini — simpan skor sampai player claim
-    // playerScore = 0; // <-- dihapus
     toggleWeb3UI();
   };
 
@@ -553,7 +361,7 @@ const sketch = p5 => {
       gameOver = pipe.checkCrash(bird) || bird.isDead();
       if (gameOver) {
         dieAudio.currentTime = 0; dieAudio.play();
-        playerScore = score; // Simpan score lokal saat game over — tetap sampai di-claim
+        playerScore += score; // score ditambah ke total player
         toggleWeb3UI();
       }
       if (pipe.getScore(bird)) { score++; pointAudio.currentTime = 0; pointAudio.play(); }
