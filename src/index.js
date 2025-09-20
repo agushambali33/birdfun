@@ -1,4 +1,4 @@
-// index.js (FULL FINAL, non-blocking TX, dengan UI baru dan integrasi voucher)
+// index.js (FULL FINAL, non-blocking TX, dengan UI baru dan voucher-only)
 import './main.scss';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './game/constants';
 import Pipe from './game/pipe';
@@ -31,14 +31,12 @@ const HELIOS_RPC = 'https://testnet1.helioschainlabs.org';
 const HELIOS_CHAIN_ID = 42000;
 const HELIOS_CHAIN_ID_HEX = ethers.utils.hexValue(HELIOS_CHAIN_ID);
 
-const CONTRACT_ADDRESS = '0x3b807e75c5b3719b76d3ae0e4b3c9f02984f2f41'; // Contract baru
+const CONTRACT_ADDRESS = '0x3b807e75c5b3719b76d3ae0e4b3c9f02984f2f41';
 const VOUCHER_ENDPOINT = 'https://birdfunbackend.vercel.app/sign';
 const CONTRACT_ABI = [
-  "function submitPoints(uint256 _points) external",
   "function redeemVoucher(address player, uint256 points, uint256 amount, uint256 nonce, uint256 expiry, bytes signature) external",
-  "function playerPoints(address) external view returns (uint256)",
-  "function getRewardPreview(address) external view returns (uint256)",
-  "function getPoolBalance() external view returns (uint256)"
+  "function getPoolBalance() external view returns (uint256)",
+  "function usedNonces(address player, uint256 nonce) external view returns (bool)"
 ];
 
 /* ====== PROVIDERS & CONTRACTS ====== */
@@ -52,7 +50,7 @@ let contractReadOnly = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provi
 /* ====== STATE ====== */
 let isWalletConnected = false;
 let playerAddress = null;
-let playerPoints = ethers.BigNumber.from(0);
+let playerScore = 0; // Ganti playerPoints jadi score lokal
 let rewardPreview = ethers.BigNumber.from(0);
 
 /* ====== UI ELEMENTS ====== */
@@ -141,9 +139,6 @@ async function connectWallet(silent = false) {
     playerAddress = accounts[0];
     isWalletConnected = !!playerAddress;
 
-    try { playerPoints = await contract.playerPoints(playerAddress); } catch {}
-    try { rewardPreview = await contract.getRewardPreview(playerAddress); } catch {}
-
     toggleWeb3UI();
     if (!silent) showToast('Wallet connected', 'success');
 
@@ -192,33 +187,20 @@ async function ensureWalletConnected() {
   }
 }
 
-async function submitScoreToBlockchain(score) {
-  if (score <= 0) return;
-  (async () => {
-    try {
-      const connected = await ensureWalletConnected();
-      if (!connected) return;
-
-      showToast('Submitting score...', 'loading');
-      const tx = await contract.submitPoints(score, { gasLimit: 300000 });
-      tx.wait().then(async () => {
-        try { playerPoints = await contract.playerPoints(playerAddress); } catch {}
-        try { rewardPreview = await contract.getRewardPreview(playerAddress); } catch {}
-        toggleWeb3UI();
-        showToast(`Score ${score} submitted`, 'success');
-      }).catch(err => {
-        console.error('submit wait error', err);
-        showToast('Submit failed', 'error');
-      });
-    } catch (err) {
-      console.error('submitScore error', err);
-      showToast(err?.message || 'Submit failed', 'error');
+async function getNextNonce() {
+  let nonce = 0;
+  try {
+    while (await contractReadOnly.usedNonces(playerAddress, nonce)) {
+      nonce++;
     }
-  })();
+  } catch (err) {
+    console.error('getNextNonce error', err);
+  }
+  return nonce;
 }
 
 async function redeemPoints() {
-  if (bnToNumberSafe(playerPoints) <= 0) {
+  if (playerScore <= 0) {
     showToast('No points to claim', 'warning');
     return;
   }
@@ -228,9 +210,9 @@ async function redeemPoints() {
       if (!connected) return;
 
       showToast('Fetching voucher...', 'loading');
-      // Panggil endpoint /sign
+      const nonce = await getNextNonce();
       const response = await fetch(
-        `${VOUCHER_ENDPOINT}?player=${playerAddress}&points=${bnToNumberSafe(playerPoints)}&amountTokens=1&nonce=0&contractAddress=${CONTRACT_ADDRESS}`
+        `${VOUCHER_ENDPOINT}?player=${playerAddress}&points=${playerScore}&amountTokens=1&nonce=${nonce}&contractAddress=${CONTRACT_ADDRESS}`
       );
       const voucher = await response.json();
 
@@ -257,8 +239,7 @@ async function redeemPoints() {
           );
           await tx.wait();
           success = true;
-          try { playerPoints = await contract.playerPoints(playerAddress); } catch {}
-          try { rewardPreview = await contract.getRewardPreview(playerAddress); } catch {}
+          playerScore = 0; // Reset score lokal setelah claim
           toggleWeb3UI();
           showToast('Voucher claimed!', 'success');
         } catch (err) {
@@ -479,7 +460,7 @@ function createTopBarUI() {
   rewardBadge = document.createElement('div');
   rewardBadge.className = 'g-badge reward';
   rewardBadge.innerText = ' 0.00';
-  rewardBadge.setAttribute('data-tooltip', 'Your Hbird rewards');
+  rewardBadge.setAttribute('data-tooltip', 'Estimated Hbird rewards');
   
   claimToggle = document.createElement('button');
   claimToggle.id = 'claim-btn';
@@ -499,18 +480,17 @@ function toggleWeb3UI() {
     connectToggle.classList.toggle('connected', isWalletConnected);
   }
   if (pointsBadge) {
-    const currentPoints = bnToNumberSafe(playerPoints);
-    pointsBadge.innerText = `🏆 Score: ${currentPoints}`;
-    if (currentPoints > 0) {
+    pointsBadge.innerText = `🏆 Score: ${playerScore}`;
+    if (playerScore > 0) {
       pointsBadge.classList.add('updated');
       setTimeout(() => pointsBadge.classList.remove('updated'), 1000);
     }
   }
   if (rewardBadge) {
-    rewardBadge.innerText = ` ${formatReward(rewardPreview)}`;
+    rewardBadge.innerText = ` ${formatReward(playerScore > 0 ? ethers.utils.parseUnits('1', 18) : 0)}`;
   }
   if (claimToggle) {
-    claimToggle.disabled = !(isWalletConnected && bnToNumberSafe(playerPoints) > 0);
+    claimToggle.disabled = !(isWalletConnected && playerScore > 0);
   }
 }
 
@@ -532,6 +512,8 @@ const sketch = p5 => {
     gameButton = new Button(p5, gameText, spriteImage);
     storage = new Storage(); score = 0; pipe.generateFirst();
     const data = storage.getStorageData(); bestScore = data?.bestScore || 0;
+    playerScore = 0; // Reset score lokal
+    toggleWeb3UI();
   };
 
   const handleInput = () => {
@@ -561,7 +543,8 @@ const sketch = p5 => {
       gameOver = pipe.checkCrash(bird) || bird.isDead();
       if (gameOver) {
         dieAudio.currentTime = 0; dieAudio.play();
-        if (isWalletConnected && score > 0) setTimeout(() => submitScoreToBlockchain(score), 700);
+        playerScore = score; // Simpan score lokal saat game over
+        toggleWeb3UI();
       }
       if (pipe.getScore(bird)) { score++; pointAudio.currentTime = 0; pointAudio.play(); }
     } else {
@@ -573,18 +556,6 @@ const sketch = p5 => {
       if (score > bestScore) { bestScore = score; storage.setStorageData({ bestScore: score }); }
       gameText.gameOverText(score, bestScore, level); gameButton.resetButton();
     } else gameText.scoreText(score, level);
-
-    if (p5.frameCount % 60 === 0) {
-      (async () => {
-        try {
-          if (isWalletConnected && contract && playerAddress) {
-            playerPoints = await contract.playerPoints(playerAddress).catch(() => ethers.BigNumber.from(0));
-            rewardPreview = await contract.getRewardPreview(playerAddress).catch(() => ethers.BigNumber.from(0));
-            toggleWeb3UI();
-          }
-        } catch {}
-      })();
-    }
   };
 
   p5.keyPressed = e => {
