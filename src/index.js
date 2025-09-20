@@ -1,4 +1,4 @@
-// index.js (FULL FINAL, non-blocking TX, dengan UI baru)
+// index.js (FULL FINAL, non-blocking TX, dengan UI baru dan voucher-only)
 import './main.scss';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './game/constants';
 import Pipe from './game/pipe';
@@ -32,7 +32,8 @@ const HELIOS_CHAIN_ID = 42000;
 const HELIOS_CHAIN_ID_HEX = ethers.utils.hexValue(HELIOS_CHAIN_ID);
 
 const CONTRACT_ADDRESS = '0x3b807e75c5b3719b76d3ae0e4b3c9f02984f2f41';
-const VOUCHER_ENDPOINT = 'https://birdfunbackend.vercel.app/sign';
+// NOTE: sign.js deployed at Vercel as /api/sign (your example used this)
+const VOUCHER_ENDPOINT = 'https://birdfunbackend.vercel.app/api/sign';
 const CONTRACT_ABI = [
   "function redeemVoucher(address player, uint256 points, uint256 amount, uint256 nonce, uint256 expiry, bytes signature) external",
   "function getPoolBalance() external view returns (uint256)",
@@ -50,7 +51,8 @@ let contractReadOnly = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provi
 /* ====== STATE ====== */
 let isWalletConnected = false;
 let playerAddress = null;
-let playerScore = 0; // Accumulate points lokal
+let playerScore = 0; // menyimpan poin sampai di-claim
+let rewardPreview = ethers.BigNumber.from(0);
 
 /* ====== UI ELEMENTS ====== */
 let topBar, connectToggle, pointsBadge, rewardBadge, claimToggle;
@@ -189,6 +191,7 @@ async function ensureWalletConnected() {
 async function getNextNonce() {
   let nonce = 0;
   try {
+    // cari nonce pertama yang belum dipakai untuk address ini
     while (await contractReadOnly.usedNonces(playerAddress, nonce)) {
       nonce++;
     }
@@ -210,17 +213,16 @@ async function redeemPoints() {
 
       showToast('Fetching voucher...', 'loading');
       const nonce = await getNextNonce();
+
+      // Note: we do NOT send amountTokens here. Backend calculates tokenAmount using 1 point = 1 Hbird.
       const response = await fetch(
-        `${VOUCHER_ENDPOINT}?player=${playerAddress}&points=${playerScore}&amountTokens=${(playerScore * 0.1).toString()}&nonce=${nonce}&contractAddress=${CONTRACT_ADDRESS}`
+        `${VOUCHER_ENDPOINT}?player=${playerAddress}&points=${playerScore}&nonce=${nonce}&contractAddress=${CONTRACT_ADDRESS}`
       );
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
       const voucher = await response.json();
 
-      if (!voucher.success) {
-        showToast('Failed to get voucher: Invalid response', 'error');
-        console.error('Invalid voucher response:', voucher);
+      if (!voucher || !voucher.success) {
+        console.error('voucher response:', voucher);
+        showToast('Failed to get voucher', 'error');
         return;
       }
 
@@ -234,7 +236,7 @@ async function redeemPoints() {
           const tx = await contract.redeemVoucher(
             voucher.player,
             voucher.points,
-            voucher.amountWei,
+            voucher.amountWei, // BigNumber string from backend
             voucher.nonce,
             voucher.expiry,
             voucher.signature,
@@ -242,7 +244,9 @@ async function redeemPoints() {
           );
           await tx.wait();
           success = true;
-          playerScore = 0; // Reset score lokal setelah claim sukses
+
+          // Reset only after successful on-chain claim
+          playerScore = 0;
           toggleWeb3UI();
           showToast('Voucher claimed!', 'success');
         } catch (err) {
@@ -252,6 +256,7 @@ async function redeemPoints() {
             showToast(err?.message || 'Claim failed', 'error');
           } else {
             showToast('Retrying claim...', 'loading');
+            // small wait then re-ensure wallet connection
             await new Promise(resolve => setTimeout(resolve, 1000));
             await ensureWalletConnected();
           }
@@ -259,7 +264,7 @@ async function redeemPoints() {
       }
     } catch (err) {
       console.error('redeemPoints error', err);
-      showToast('Failed to fetch voucher: ' + (err?.message || 'unknown'), 'error');
+      showToast(err?.message || 'Claim failed', 'error');
     }
   })();
 }
@@ -483,18 +488,18 @@ function toggleWeb3UI() {
     connectToggle.classList.toggle('connected', isWalletConnected);
   }
   if (pointsBadge) {
-    const currentPoints = bnToNumberSafe(playerScore);
-    pointsBadge.innerText = `🏆 Score: ${currentPoints}`;
-    if (currentPoints > 0) {
+    pointsBadge.innerText = `🏆 Score: ${playerScore}`;
+    if (playerScore > 0) {
       pointsBadge.classList.add('updated');
       setTimeout(() => pointsBadge.classList.remove('updated'), 1000);
     }
   }
   if (rewardBadge) {
-    rewardBadge.innerText = ` ${(playerScore * 0.1).toFixed(2)}`; // Rate 1 point = 0.1 Hbird
+    // Show reward = playerScore Hbird (1 point = 1 Hbird)
+    rewardBadge.innerText = ` ${formatReward(playerScore > 0 ? ethers.utils.parseUnits(playerScore.toString(), 18) : 0)}`;
   }
   if (claimToggle) {
-    claimToggle.disabled = !(isWalletConnected && bnToNumberSafe(playerScore) > 0);
+    claimToggle.disabled = !(isWalletConnected && playerScore > 0);
   }
 }
 
@@ -516,7 +521,9 @@ const sketch = p5 => {
     gameButton = new Button(p5, gameText, spriteImage);
     storage = new Storage(); score = 0; pipe.generateFirst();
     const data = storage.getStorageData(); bestScore = data?.bestScore || 0;
-    // Tidak reset playerScore, biar accumulate
+    // IMPORTANT: jangan reset playerScore di sini — simpan skor sampai player claim
+    // playerScore = 0; // <-- dihapus
+    toggleWeb3UI();
   };
 
   const handleInput = () => {
@@ -546,7 +553,7 @@ const sketch = p5 => {
       gameOver = pipe.checkCrash(bird) || bird.isDead();
       if (gameOver) {
         dieAudio.currentTime = 0; dieAudio.play();
-        playerScore += score; // Accumulate points lokal
+        playerScore = score; // Simpan score lokal saat game over — tetap sampai di-claim
         toggleWeb3UI();
       }
       if (pipe.getScore(bird)) { score++; pointAudio.currentTime = 0; pointAudio.play(); }
@@ -559,17 +566,6 @@ const sketch = p5 => {
       if (score > bestScore) { bestScore = score; storage.setStorageData({ bestScore: score }); }
       gameText.gameOverText(score, bestScore, level); gameButton.resetButton();
     } else gameText.scoreText(score, level);
-
-    if (p5.frameCount % 60 === 0) {
-      (async () => {
-        try {
-          if (isWalletConnected && contract && playerAddress) {
-            // Estimasi reward lokal
-            toggleWeb3UI();
-          }
-        } catch {}
-      })();
-    }
   };
 
   p5.keyPressed = e => {
