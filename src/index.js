@@ -1,4 +1,4 @@
-// index.js (FULL FINAL V4 tanpa Auto-Claim, Leaderboard di bawah Connect, Points/HBIRD/Pool 1 Kotak, Highscore per Wallet)
+// index.js (FULL FINAL V4 tanpa Leaderboard, dengan Twitter Follow sebelum Claim)
 import './main.scss';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './game/constants';
 import Pipe from './game/pipe';
@@ -29,6 +29,7 @@ const HELIOS_CHAIN_ID_HEX = ethers.utils.hexValue(HELIOS_CHAIN_ID);
 
 const CONTRACT_ADDRESS = '0xb9ccd00c2016444f58e2492117b49da317f4899b'; // V4
 const VOUCHER_ENDPOINT = 'https://birdfunbackend.vercel.app/api/sign';
+const TWITTER_HANDLE = '@BirdFunGame';
 const CONTRACT_ABI = [
   "function claimReward(uint256 amount,uint256 nonce,uint256 expiry,bytes signature) external",
   "function getPoolBalance() external view returns (uint256)",
@@ -52,7 +53,7 @@ let playerScore = 0;
 let rewardPreview = ethers.BigNumber.from(0);
 
 /* ====== UI ELEMENTS ====== */
-let topBar, connectToggle, infoBadge, claimToggle, leaderboardDiv, toggleLeaderboard;
+let topBar, connectToggle, infoBadge, claimToggle;
 
 /* ====== HELPERS ====== */
 const formatReward = (points) => {
@@ -97,31 +98,26 @@ function loadPlayerScore() {
   }
 }
 
-/* ====== LEADERBOARD ====== */
-async function fetchLeaderboard() {
-  try {
-    const filter = contractReadOnly.filters.RewardClaimed();
-    const logs = await providerReadonly.getLogs({ ...filter, fromBlock: 0 });
-    if (logs.length === 0) {
-      logDebug('No RewardClaimed events found');
-      return [];
+/* ====== TWITTER FOLLOW CHECK ====== */
+function checkTwitterFollow() {
+  if (playerAddress) {
+    const followed = localStorage.getItem(`twitterFollowed_${playerAddress.toLowerCase()}`);
+    if (followed) {
+      logDebug(`Twitter already followed for ${playerAddress}`);
+      return true;
     }
-    const leaderboard = logs.reduce((acc, log) => {
-      const { player, amount } = contractReadOnly.interface.parseLog(log).args;
-      acc[player] = (acc[player] || 0) + parseFloat(ethers.utils.formatUnits(amount, 18));
-      return acc;
-    }, {});
-    const topPlayers = Object.entries(leaderboard)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 5)
-      .map(([address, hbird]) => ({ address: `${address.slice(0, 4)}...${address.slice(-4)}`, hbird: hbird.toFixed(2) }));
-    logDebug(`Leaderboard fetched: ${JSON.stringify(topPlayers)}`);
-    return topPlayers;
-  } catch (err) {
-    logDebug(`Leaderboard error: ${err.message}`);
-    showToast('Failed to load leaderboard', 'error');
-    return [];
+    const confirmed = confirm(`Please follow ${TWITTER_HANDLE} on Twitter to claim rewards! Click OK after following.`);
+    if (confirmed) {
+      window.open(`https://x.com/${TWITTER_HANDLE.slice(1)}`, '_blank');
+      localStorage.setItem(`twitterFollowed_${playerAddress.toLowerCase()}`, 'true');
+      logDebug(`Twitter follow confirmed for ${playerAddress}`);
+      return true;
+    }
+    showToast(`Follow ${TWITTER_HANDLE} to claim!`, 'warning');
+    return false;
   }
+  showToast('Connect wallet first!', 'error');
+  return false;
 }
 
 /* ====== POOL BALANCE ====== */
@@ -284,6 +280,7 @@ async function redeemPoints() {
     showToast('No points to claim', 'warning');
     return;
   }
+  if (!checkTwitterFollow()) return;
   try {
     const connected = await ensureWalletConnected();
     if (!connected) return;
@@ -369,13 +366,6 @@ function injectStyles() {
       font-size: 8px; font-family: 'Press Start 2P', Arial, sans-serif; cursor: pointer;
     }
     #claim-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
-    #leaderboard {
-      background: rgba(0, 0, 0, 0.8); border-radius: 8px; padding: 6px; max-width: 180px;
-      font-family: 'Press Start 2P', Arial, sans-serif; color: #fff; font-size: 8px;
-      line-height: 1.3; max-height: 100px; overflow-y: auto;
-    }
-    #leaderboard div { margin-bottom: 4px; }
-    #leaderboard div:last-child { margin-bottom: 0; }
     .game-toast {
       position: fixed; top: 80px; right: 10px; background: rgba(0, 0, 0, 0.9); color: #fff;
       padding: 6px 10px; border-radius: 6px; z-index: 10000; font-family: 'Press Start 2P';
@@ -383,7 +373,6 @@ function injectStyles() {
     }
     @media (max-width: 600px) {
       #web3-info { max-width: 150px; }
-      #leaderboard { max-width: 140px; font-size: 7px; }
       .g-badge, #claim-btn { font-size: 7px; }
       .g-toggle { font-size: 7px; height: 20px; }
     }
@@ -401,19 +390,7 @@ function createTopBarUI() {
   connectToggle.innerText = '🦊 Connect Wallet';
   connectToggle.onclick = () => connectWallet();
   
-  toggleLeaderboard = document.createElement('button');
-  toggleLeaderboard.className = 'g-toggle';
-  toggleLeaderboard.innerText = 'Hide Leaderboard';
-  toggleLeaderboard.onclick = () => {
-    leaderboardDiv.style.display = leaderboardDiv.style.display === 'none' ? 'block' : 'none';
-    toggleLeaderboard.innerText = leaderboardDiv.style.display === 'none' ? 'Show Leaderboard' : 'Hide Leaderboard';
-  };
-  
-  leaderboardDiv = document.createElement('div');
-  leaderboardDiv.id = 'leaderboard';
-  leaderboardDiv.innerText = '🏅 Leaderboard: Make a claim to start!';
-  
-  topBar.append(connectToggle, toggleLeaderboard, leaderboardDiv);
+  topBar.append(connectToggle);
   document.body.appendChild(topBar);
   
   const web3Info = document.createElement('div');
@@ -445,12 +422,6 @@ async function toggleWeb3UI() {
   }
   if (claimToggle) {
     claimToggle.disabled = !(isWalletConnected && playerScore > 0);
-  }
-  if (leaderboardDiv) {
-    const topPlayers = await fetchLeaderboard();
-    leaderboardDiv.innerHTML = topPlayers.length > 0
-      ? topPlayers.map(p => `<div>🏅 ${p.address}: ${p.hbird} Hbird</div>`).join('')
-      : '🏅 Make a claim to start!';
   }
 }
 
@@ -501,7 +472,7 @@ const sketch = p5 => {
     createTopBarUI();
     toggleWeb3UI();
     autoConnectWallet();
-    setInterval(toggleWeb3UI, 30000); // Auto-refresh leaderboard setiap 30 detik
+    setInterval(toggleWeb3UI, 30000); // Auto-refresh info badge setiap 30 detik
     resetGame();
     p5.canvas.addEventListener('touchstart', e => { e.preventDefault(); handleInput(); }, { passive: false });
     p5.canvas.addEventListener('mousedown', e => { handleInput(); });
