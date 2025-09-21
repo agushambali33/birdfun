@@ -1,4 +1,4 @@
-// index.js (FULL FINAL V4 dengan Leaderboard di bawah Connect, Points/HBIRD/Pool 1 Kotak, Highscore per Wallet)
+// index.js (FULL FINAL V4 tanpa Auto-Claim, Leaderboard di bawah Connect, Points/HBIRD/Pool 1 Kotak, Highscore per Wallet)
 import './main.scss';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './game/constants';
 import Pipe from './game/pipe';
@@ -50,7 +50,6 @@ let isWalletConnected = false;
 let playerAddress = null;
 let playerScore = 0;
 let rewardPreview = ethers.BigNumber.from(0);
-let promptShown = false;
 
 /* ====== UI ELEMENTS ====== */
 let topBar, connectToggle, infoBadge, claimToggle, leaderboardDiv, toggleLeaderboard;
@@ -103,6 +102,10 @@ async function fetchLeaderboard() {
   try {
     const filter = contractReadOnly.filters.RewardClaimed();
     const logs = await providerReadonly.getLogs({ ...filter, fromBlock: 0 });
+    if (logs.length === 0) {
+      logDebug('No RewardClaimed events found');
+      return [];
+    }
     const leaderboard = logs.reduce((acc, log) => {
       const { player, amount } = contractReadOnly.interface.parseLog(log).args;
       acc[player] = (acc[player] || 0) + parseFloat(ethers.utils.formatUnits(amount, 18));
@@ -112,10 +115,11 @@ async function fetchLeaderboard() {
       .sort(([, a], [, b]) => b - a)
       .slice(0, 5)
       .map(([address, hbird]) => ({ address: `${address.slice(0, 4)}...${address.slice(-4)}`, hbird: hbird.toFixed(2) }));
-    logDebug(`Leaderboard: ${JSON.stringify(topPlayers)}`);
+    logDebug(`Leaderboard fetched: ${JSON.stringify(topPlayers)}`);
     return topPlayers;
   } catch (err) {
     logDebug(`Leaderboard error: ${err.message}`);
+    showToast('Failed to load leaderboard', 'error');
     return [];
   }
 }
@@ -192,7 +196,7 @@ async function connectWallet(silent = false) {
     const lastLogin = localStorage.getItem(`lastLogin_${playerAddress.toLowerCase()}`);
     const today = new Date().toDateString();
     if (lastLogin !== today) {
-      playerScore += 2; // Bonus 2 points
+      playerScore += 2;
       localStorage.setItem(`lastLogin_${playerAddress.toLowerCase()}`, today);
       savePlayerScore();
       showToast('Daily bonus: +2 points!', 'success');
@@ -407,7 +411,7 @@ function createTopBarUI() {
   
   leaderboardDiv = document.createElement('div');
   leaderboardDiv.id = 'leaderboard';
-  leaderboardDiv.innerText = '🏅 Leaderboard: Loading...';
+  leaderboardDiv.innerText = '🏅 Leaderboard: Make a claim to start!';
   
   topBar.append(connectToggle, toggleLeaderboard, leaderboardDiv);
   document.body.appendChild(topBar);
@@ -446,7 +450,7 @@ async function toggleWeb3UI() {
     const topPlayers = await fetchLeaderboard();
     leaderboardDiv.innerHTML = topPlayers.length > 0
       ? topPlayers.map(p => `<div>🏅 ${p.address}: ${p.hbird} Hbird</div>`).join('')
-      : '🏅 No claims yet';
+      : '🏅 Make a claim to start!';
   }
 }
 
@@ -477,7 +481,6 @@ const sketch = p5 => {
     gameButton = new Button(p5, gameText, spriteImage);
     score = 0;
     pipe.generateFirst();
-    promptShown = false;
     toggleWeb3UI();
   };
 
@@ -545,16 +548,6 @@ const sketch = p5 => {
       }
       gameText.gameOverText(score, bestScore, level);
       gameButton.resetButton();
-      // Auto-Claim Prompt
-      if (playerScore >= 10 && !promptShown) {
-        promptShown = true;
-        setTimeout(() => {
-          if (confirm(`You have ${playerScore} points (${formatReward(playerScore)} Hbird). Claim now?`)) {
-            redeemPoints();
-          }
-          promptShown = false;
-        }, 1000);
-      }
     } else gameText.scoreText(score, level);
   };
 
