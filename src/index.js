@@ -1,4 +1,4 @@
-// index.js (FULL FINAL dengan Web3 + Voucher Integration ke V4)
+// index.js (FULL FINAL V4 dengan Fix highScore, Toast, dan Rate 0.5 Token)
 import './main.scss';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './game/constants';
 import Pipe from './game/pipe';
@@ -11,20 +11,16 @@ import Images from './assets/sprite.png';
 import BackgroundImage from './assets/background.png';
 import fontFile from './assets/FlappyBirdy.ttf';
 import Storage from './storage';
-
-// sounds
 import wingSound from "./assets/sounds/wing.ogg";
 import pointSound from "./assets/sounds/point.ogg";
 import hitSound from "./assets/sounds/hit.ogg";
 import dieSound from "./assets/sounds/die.ogg";
+import { ethers } from 'ethers';
 
 export const wingAudio = new Audio(wingSound);
 export const pointAudio = new Audio(pointSound);
 export const hitAudio = new Audio(hitSound);
 export const dieAudio = new Audio(dieSound);
-
-// ethers
-import { ethers } from 'ethers';
 
 /* ====== CONFIG ====== */
 const HELIOS_RPC = 'https://testnet1.helioschainlabs.org';
@@ -60,7 +56,8 @@ let topBar, connectToggle, pointsBadge, rewardBadge, claimToggle;
 /* ====== HELPERS ====== */
 const formatReward = (points) => {
   try {
-    return ethers.utils.formatUnits(ethers.BigNumber.from(points).mul(ethers.BigNumber.from(10).pow(18)), 18);
+    // 1 point = 0.5 HBIRD, jadi kalikan points dengan 0.5 * 10^18
+    return ethers.utils.formatUnits(ethers.BigNumber.from(points).mul(ethers.BigNumber.from(5).mul(ethers.BigNumber.from(10).pow(17))), 18);
   } catch {
     return "0.00";
   }
@@ -241,7 +238,7 @@ async function redeemPoints() {
     const canClaim = await checkCooldown();
     if (!canClaim) return;
 
-    showToast('Fetching voucher...', 'loading');
+    showToast('Fetching token voucher...', 'loading');
     const nonce = await getNextNonce();
     const response = await fetch(
       `${VOUCHER_ENDPOINT}?player=${playerAddress}&amount=${playerScore}&nonce=${nonce}&contractAddress=${CONTRACT_ADDRESS}`
@@ -250,11 +247,11 @@ async function redeemPoints() {
     logDebug(`Voucher response: ${JSON.stringify(voucher)}`);
 
     if (!voucher.success) {
-      showToast('Failed to get voucher', 'error');
+      showToast('Failed to get token voucher', 'error');
       return;
     }
 
-    showToast('Claiming voucher...', 'loading');
+    showToast('Claiming token...', 'loading');
     const tx = await contract.claimReward(
       voucher.amountWei,
       voucher.nonce,
@@ -269,7 +266,7 @@ async function redeemPoints() {
     playerScore = 0; // Reset setelah sukses claim
     savePlayerScore(); // Simpan reset score
     toggleWeb3UI();
-    showToast('Reward claimed!', 'success');
+    showToast('Token claimed!', 'success');
   } catch (err) {
     console.error('redeemPoints error', err);
     let errMsg = err?.message || 'Claim failed';
@@ -375,6 +372,11 @@ const sketch = p5 => {
     spriteImage = p5.loadImage(Images);
     backgroundImg = p5.loadImage(BackgroundImage);
     birdyFont = p5.loadFont(fontFile);
+    storage = new Storage();
+    // Inisialisasi bestScore dari Storage, default 0 jika kosong
+    const storageData = storage.getStorageData() || { bestScore: 0 };
+    bestScore = storageData.bestScore || 0;
+    logDebug(`Loaded bestScore: ${bestScore}`);
   };
 
   const resetGame = () => {
@@ -382,7 +384,7 @@ const sketch = p5 => {
     bird = new Bird(p5, spriteImage); pipe = new Pipe(p5, spriteImage);
     floor = new Floor(p5, spriteImage); gameText = new Text(p5, birdyFont);
     gameButton = new Button(p5, gameText, spriteImage);
-    storage = new Storage(); score = 0; pipe.generateFirst();
+    score = 0; pipe.generateFirst();
     toggleWeb3UI();
   };
 
@@ -424,7 +426,11 @@ const sketch = p5 => {
     }
     if (!gameStart) gameText.startText();
     if (gameOver) {
-      if (score > bestScore) { bestScore = score; storage.setStorageData({ bestScore: score }); }
+      if (score > bestScore) {
+        bestScore = score;
+        storage.setStorageData({ bestScore: score });
+        logDebug(`New bestScore saved: ${bestScore}`);
+      }
       gameText.gameOverText(score, bestScore, level); gameButton.resetButton();
     } else gameText.scoreText(score, level);
   };
