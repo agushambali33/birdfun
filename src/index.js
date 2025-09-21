@@ -1,4 +1,4 @@
-// index.js (FULL FINAL V4 tanpa Leaderboard, dengan Twitter Follow sebelum Claim)
+// index.js (FULL FINAL V4 tanpa Leaderboard, Twitter Follow @agushambali33 dengan Konfirmasi)
 import './main.scss';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './game/constants';
 import Pipe from './game/pipe';
@@ -29,7 +29,7 @@ const HELIOS_CHAIN_ID_HEX = ethers.utils.hexValue(HELIOS_CHAIN_ID);
 
 const CONTRACT_ADDRESS = '0xb9ccd00c2016444f58e2492117b49da317f4899b'; // V4
 const VOUCHER_ENDPOINT = 'https://birdfunbackend.vercel.app/api/sign';
-const TWITTER_HANDLE = '@BirdFunGame';
+const TWITTER_HANDLE = '@agushambali33';
 const CONTRACT_ABI = [
   "function claimReward(uint256 amount,uint256 nonce,uint256 expiry,bytes signature) external",
   "function getPoolBalance() external view returns (uint256)",
@@ -106,15 +106,22 @@ function checkTwitterFollow() {
       logDebug(`Twitter already followed for ${playerAddress}`);
       return true;
     }
-    const confirmed = confirm(`Please follow ${TWITTER_HANDLE} on Twitter to claim rewards! Click OK after following.`);
-    if (confirmed) {
-      window.open(`https://x.com/${TWITTER_HANDLE.slice(1)}`, '_blank');
+    const hasFollowed = confirm(`Have you followed ${TWITTER_HANDLE} on Twitter? Click OK if yes, or Cancel to follow now.`);
+    if (hasFollowed) {
       localStorage.setItem(`twitterFollowed_${playerAddress.toLowerCase()}`, 'true');
       logDebug(`Twitter follow confirmed for ${playerAddress}`);
       return true;
+    } else {
+      const confirmed = confirm(`Please follow ${TWITTER_HANDLE} on Twitter to claim rewards! Click OK after following.`);
+      if (confirmed) {
+        window.open(`https://x.com/${TWITTER_HANDLE.slice(1)}`, '_blank');
+        localStorage.setItem(`twitterFollowed_${playerAddress.toLowerCase()}`, 'true');
+        logDebug(`Twitter follow confirmed for ${playerAddress} after opening Twitter`);
+        return true;
+      }
+      showToast(`Follow ${TWITTER_HANDLE} to claim!`, 'warning');
+      return false;
     }
-    showToast(`Follow ${TWITTER_HANDLE} to claim!`, 'warning');
-    return false;
   }
   showToast('Connect wallet first!', 'error');
   return false;
