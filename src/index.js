@@ -1,4 +1,4 @@
-// index.js (UPGRADE untuk V4 HBIRD & Debug Full)
+// index.js (FULL FINAL dengan Web3 + Voucher Integration ke V4)
 import './main.scss';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './game/constants';
 import Pipe from './game/pipe';
@@ -11,23 +11,27 @@ import Images from './assets/sprite.png';
 import BackgroundImage from './assets/background.png';
 import fontFile from './assets/FlappyBirdy.ttf';
 import Storage from './storage';
+
+// sounds
 import wingSound from "./assets/sounds/wing.ogg";
 import pointSound from "./assets/sounds/point.ogg";
 import hitSound from "./assets/sounds/hit.ogg";
 import dieSound from "./assets/sounds/die.ogg";
-import { ethers } from 'ethers';
 
 export const wingAudio = new Audio(wingSound);
 export const pointAudio = new Audio(pointSound);
 export const hitAudio = new Audio(hitSound);
 export const dieAudio = new Audio(dieSound);
 
-/* ===== CONFIG ===== */
+// ethers
+import { ethers } from 'ethers';
+
+/* ====== CONFIG ====== */
 const HELIOS_RPC = 'https://testnet1.helioschainlabs.org';
 const HELIOS_CHAIN_ID = 42000;
 const HELIOS_CHAIN_ID_HEX = ethers.utils.hexValue(HELIOS_CHAIN_ID);
 
-const CONTRACT_ADDRESS = '0xb9ccd00c2016444f58e2492117b49da317f4899b'; // HBIRD V4
+const CONTRACT_ADDRESS = '0xb9ccd00c2016444f58e2492117b49da317f4899b'; // V4
 const VOUCHER_ENDPOINT = 'https://birdfunbackend.vercel.app/api/sign';
 const CONTRACT_ABI = [
   "function claimReward(uint256 amount,uint256 nonce,uint256 expiry,bytes signature) external",
@@ -36,22 +40,24 @@ const CONTRACT_ABI = [
   "function lastClaim(address player) external view returns (uint256)"
 ];
 
-/* ===== PROVIDERS & CONTRACTS ===== */
+/* ====== PROVIDERS & CONTRACTS ====== */
+const providerReadonly = new ethers.providers.JsonRpcProvider(HELIOS_RPC);
+
 let provider = null;
 let signer = null;
 let contract = null;
-const contractReadOnly = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, new ethers.providers.JsonRpcProvider(HELIOS_RPC));
+let contractReadOnly = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, providerReadonly);
 
-/* ===== STATE ===== */
+/* ====== STATE ====== */
 let isWalletConnected = false;
 let playerAddress = null;
-let playerScore = 0; 
+let playerScore = 0; // poin terkumpul (tidak hilang saat mati)
 let rewardPreview = ethers.BigNumber.from(0);
 
-/* ===== UI ELEMENTS ===== */
+/* ====== UI ELEMENTS ====== */
 let topBar, connectToggle, pointsBadge, rewardBadge, claimToggle;
 
-/* ===== HELPERS ===== */
+/* ====== HELPERS ====== */
 const formatReward = (points) => {
   try {
     return ethers.utils.formatUnits(ethers.BigNumber.from(points).mul(ethers.BigNumber.from(10).pow(18)), 18);
@@ -62,7 +68,7 @@ const formatReward = (points) => {
 
 const logDebug = (msg) => console.log(`[DEBUG] ${new Date().toISOString()} ${msg}`);
 
-/* ===== TOAST ===== */
+/* ====== TOAST ====== */
 const showToast = (msg, type = 'info') => {
   const existing = document.querySelector('.game-toast');
   if (existing) existing.remove();
@@ -77,7 +83,7 @@ const showToast = (msg, type = 'info') => {
   }, 2400);
 };
 
-/* ===== LOCAL STORAGE FOR PERSISTENCE ===== */
+/* ====== LOCAL STORAGE FOR PERSISTENCE ====== */
 function savePlayerScore() {
   if (playerAddress) {
     localStorage.setItem(`playerScore_${playerAddress.toLowerCase()}`, playerScore.toString());
@@ -94,18 +100,20 @@ function loadPlayerScore() {
   }
 }
 
-/* ===== WEB3 ===== */
+/* ====== WEB3 ACTIONS ====== */
 async function connectWallet(silent = false) {
-  if (!window.ethereum) {
+  if (typeof window.ethereum === 'undefined') {
     if (!silent) showToast('Please install MetaMask!', 'error');
     return false;
   }
   try {
-    await window.ethereum.request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: HELIOS_CHAIN_ID_HEX }]
-    }).catch(async (err) => {
-      if (err.code === 4902) {
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: HELIOS_CHAIN_ID_HEX }]
+      });
+    } catch (switchErr) {
+      if (switchErr && switchErr.code === 4902) {
         await window.ethereum.request({
           method: 'wallet_addEthereumChain',
           params: [{
@@ -116,40 +124,78 @@ async function connectWallet(silent = false) {
             blockExplorerUrls: ['https://explorer.helioschainlabs.org']
           }]
         });
+      } else if (!silent) {
+        throw switchErr;
       }
-    });
+    }
 
-    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    if (accounts.length === 0) return false;
+    let accounts;
+    if (silent) {
+      accounts = await window.ethereum.request({ method: 'eth_accounts' });
+    } else {
+      accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    }
+
+    if (accounts.length === 0) {
+      if (!silent) showToast('No accounts found', 'error');
+      return false;
+    }
 
     provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
     signer = provider.getSigner();
     contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
     playerAddress = accounts[0].toLowerCase(); // Normalize to lowercase
     isWalletConnected = !!playerAddress;
 
-    window.ethereum.on('accountsChanged', autoConnectWallet);
-    window.ethereum.on('chainChanged', autoConnectWallet);
-
-    loadPlayerScore(); // Load persisted score after connect
+    loadPlayerScore(); // Load score setelah connect
     toggleWeb3UI();
-    showToast('Wallet connected', 'success');
+    if (!silent) showToast('Wallet connected', 'success');
     logDebug(`Wallet connected: ${playerAddress}`);
+
+    window.ethereum.on('accountsChanged', () => {
+      isWalletConnected = false;
+      playerAddress = null;
+      autoConnectWallet();
+    });
+    window.ethereum.on('chainChanged', () => {
+      isWalletConnected = false;
+      playerAddress = null;
+      autoConnectWallet();
+    });
+
     return true;
   } catch (err) {
-    console.error(err);
-    if (!silent) showToast(err?.message || 'Connect failed', 'error');
+    console.error('connectWallet error', err);
+    if (!silent) showToast('Connect failed: ' + (err?.message || 'unknown'), 'error');
     return false;
   }
 }
 
-async function autoConnectWallet() { await connectWallet(true); }
+async function autoConnectWallet() {
+  await connectWallet(true);
+}
 
 async function ensureWalletConnected() {
   if (!isWalletConnected || !contract || !signer || !playerAddress) {
-    return await connectWallet(true);
+    const connected = await connectWallet(true);
+    if (!connected) {
+      showToast('Please reconnect wallet', 'error');
+      return false;
+    }
   }
-  return true;
+  try {
+    const network = await provider.getNetwork();
+    if (network.chainId !== HELIOS_CHAIN_ID) {
+      await connectWallet(true);
+    }
+    await signer.getAddress();
+    return true;
+  } catch (err) {
+    console.error('ensureWalletConnected error', err);
+    await connectWallet(true);
+    return !!isWalletConnected;
+  }
 }
 
 async function getNextNonce() {
@@ -159,7 +205,8 @@ async function getNextNonce() {
     logDebug(`Next nonce for ${playerAddress}: ${next}`);
     return next;
   } catch (err) {
-    logDebug(`AutoNonce error: ${err.message}`);
+    console.error('getNextNonce error', err);
+    logDebug(`getNextNonce error: ${err.message}`);
     return 1; // Fallback jika error
   }
 }
@@ -176,12 +223,13 @@ async function checkCooldown() {
     }
     return true;
   } catch (err) {
-    logDebug(`Cooldown check error: ${err.message}`);
+    console.error('checkCooldown error', err);
+    logDebug(`checkCooldown error: ${err.message}`);
     return true; // Assume ok jika error
   }
 }
 
-async function claimReward() {
+async function redeemPoints() {
   if (playerScore <= 0) {
     showToast('No points to claim', 'warning');
     return;
@@ -195,17 +243,18 @@ async function claimReward() {
 
     showToast('Fetching voucher...', 'loading');
     const nonce = await getNextNonce();
-    const url = `${VOUCHER_ENDPOINT}?player=${playerAddress}&amount=${playerScore}&nonce=${nonce}&contractAddress=${CONTRACT_ADDRESS}`;
-    const res = await fetch(url);
-    const voucher = await res.json();
+    const response = await fetch(
+      `${VOUCHER_ENDPOINT}?player=${playerAddress}&amount=${playerScore}&nonce=${nonce}&contractAddress=${CONTRACT_ADDRESS}`
+    );
+    const voucher = await response.json();
     logDebug(`Voucher response: ${JSON.stringify(voucher)}`);
 
     if (!voucher.success) {
-      showToast('Voucher fetch failed', 'error');
+      showToast('Failed to get voucher', 'error');
       return;
     }
 
-    showToast('Sending transaction...', 'loading');
+    showToast('Claiming voucher...', 'loading');
     const tx = await contract.claimReward(
       voucher.amountWei,
       voucher.nonce,
@@ -217,12 +266,12 @@ async function claimReward() {
     const receipt = await tx.wait();
     logDebug(`TX confirmed in block ${receipt.blockNumber}`);
 
-    playerScore = 0;
-    savePlayerScore(); // Save reset score
+    playerScore = 0; // Reset setelah sukses claim
+    savePlayerScore(); // Simpan reset score
     toggleWeb3UI();
     showToast('Reward claimed!', 'success');
   } catch (err) {
-    console.error(err);
+    console.error('redeemPoints error', err);
     let errMsg = err?.message || 'Claim failed';
     if (errMsg.includes('NonceTooLow')) {
       errMsg = 'Invalid nonce - try again';
@@ -235,41 +284,89 @@ async function claimReward() {
   }
 }
 
-/* ===== UI ===== */
+/* ====== UI ====== */
 function injectStyles() {
   const s = document.createElement('style');
   s.innerHTML = `
-    /* same styles as before for top bar, badges, claim button, toast */
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+    #game-topbar {
+      position: fixed; top: 5px; left: 5px; display: flex; align-items: center; z-index: 9999;
+    }
+    .g-toggle {
+      height: 28px; padding: 0 10px; border-radius: 12px; border: 2px solid #fff;
+      background: linear-gradient(135deg, #00CED1, #20B2AA); color: #fff; font-size: 10px;
+      font-weight: 700; font-family: 'Press Start 2P', Arial, sans-serif;
+      display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    }
+    .g-toggle.connected { background: linear-gradient(135deg, #32CD32, #228B22); }
+    #web3-info { position: fixed; top: 5px; right: 5px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; z-index: 9999; }
+    .g-badge { padding: 5px 8px; border-radius: 10px; background: rgba(0, 0, 0, 0.7); color: #fff;
+      font-size: 10px; font-weight: 700; font-family: 'Press Start 2P', Arial, sans-serif; display: inline-flex; gap: 4px; }
+    .g-badge.points { background: linear-gradient(135deg, #FFD700, #FFA500); }
+    .g-badge.reward::after { content: ' Hbird'; font-size: 8px; margin-left: 4px; color: #00CED1; }
+    #claim-btn { height: 28px; padding: 0 10px; border-radius: 12px; border: 2px solid #fff;
+      background: linear-gradient(135deg, #FFD54F, #FF8A00); color: #000; font-weight: 800;
+      font-size: 10px; font-family: 'Press Start 2P', Arial, sans-serif; cursor: pointer; }
+    #claim-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+    .game-toast { position: fixed; top: 80px; right: 10px; background: rgba(0, 0, 0, 0.9); color: #fff;
+      padding: 6px 10px; border-radius: 6px; z-index: 10000; font-family: 'Press Start 2P'; font-size: 10px; }
   `;
   document.head.appendChild(s);
 }
 
 function createTopBarUI() {
   if (document.getElementById('game-topbar')) return;
-  topBar = document.createElement('div'); topBar.id = 'game-topbar';
-  connectToggle = document.createElement('button'); connectToggle.className = 'g-toggle'; connectToggle.innerText = '🦊 Connect Wallet';
+  topBar = document.createElement('div');
+  topBar.id = 'game-topbar';
+  
+  connectToggle = document.createElement('button');
+  connectToggle.className = 'g-toggle';
+  connectToggle.innerText = '🦊 Connect Wallet';
   connectToggle.onclick = () => connectWallet();
-  topBar.appendChild(connectToggle); document.body.appendChild(topBar);
-
-  const web3Info = document.createElement('div'); web3Info.id = 'web3-info';
-  pointsBadge = document.createElement('div'); pointsBadge.className = 'g-badge points'; pointsBadge.innerText = '🏆 Score: 0';
-  rewardBadge = document.createElement('div'); rewardBadge.className = 'g-badge reward'; rewardBadge.innerText = '0.00';
-  claimToggle = document.createElement('button'); claimToggle.id = 'claim-btn'; claimToggle.innerText = 'Claim';
-  claimToggle.onclick = claimReward; claimToggle.disabled = true;
-  web3Info.append(pointsBadge, rewardBadge, claimToggle); document.body.appendChild(web3Info);
+  
+  topBar.appendChild(connectToggle);
+  document.body.appendChild(topBar);
+  
+  const web3Info = document.createElement('div');
+  web3Info.id = 'web3-info';
+  
+  pointsBadge = document.createElement('div');
+  pointsBadge.className = 'g-badge points';
+  pointsBadge.innerText = '🏆 Score: 0';
+  
+  rewardBadge = document.createElement('div');
+  rewardBadge.className = 'g-badge reward';
+  rewardBadge.innerText = '0.00';
+  
+  claimToggle = document.createElement('button');
+  claimToggle.id = 'claim-btn';
+  claimToggle.innerText = 'Claim';
+  claimToggle.onclick = redeemPoints;
+  claimToggle.disabled = true;
+  
+  web3Info.append(pointsBadge, rewardBadge, claimToggle);
+  document.body.appendChild(web3Info);
 }
 
 function toggleWeb3UI() {
   if (connectToggle) {
-    connectToggle.innerText = (isWalletConnected && playerAddress) ? `✅ ${playerAddress.slice(0,4)}...${playerAddress.slice(-4)}` : '🦊 Connect Wallet';
+    connectToggle.innerText = (isWalletConnected && playerAddress)
+      ? `✅ ${playerAddress.slice(0, 4)}...${playerAddress.slice(-4)}`
+      : '🦊 Connect Wallet';
     connectToggle.classList.toggle('connected', isWalletConnected);
   }
-  if (pointsBadge) pointsBadge.innerText = `🏆 Score: ${playerScore}`;
-  if (rewardBadge) rewardBadge.innerText = `${formatReward(playerScore)}`;
-  if (claimToggle) claimToggle.disabled = !(isWalletConnected && playerScore > 0);
+  if (pointsBadge) {
+    pointsBadge.innerText = `🏆 Score: ${playerScore}`;
+  }
+  if (rewardBadge) {
+    rewardBadge.innerText = `${formatReward(playerScore)}`;
+  }
+  if (claimToggle) {
+    claimToggle.disabled = !(isWalletConnected && playerScore > 0);
+  }
 }
 
-/* ===== P5 GAME ===== */
+/* ====== P5 GAME ====== */
 const sketch = p5 => {
   let backgroundImg, spriteImage, birdyFont;
   let gameStart, gameOver, bird, pipe, floor, gameButton, gameText, score, storage, bestScore;
@@ -284,26 +381,58 @@ const sketch = p5 => {
     gameStart = false; gameOver = false;
     bird = new Bird(p5, spriteImage); pipe = new Pipe(p5, spriteImage);
     floor = new Floor(p5, spriteImage); gameText = new Text(p5, birdyFont);
-    gameButton = new Button(p5, gameText, spriteImage); storage = new Storage();
-    score = 0; pipe.generateFirst(); toggleWeb3UI();
+    gameButton = new Button(p5, gameText, spriteImage);
+    storage = new Storage(); score = 0; pipe.generateFirst();
+    toggleWeb3UI();
   };
 
-  const handleInput = () => { if (!gameOver) bird?.jump(); if (!gameStart) gameStart = true; };
+  const handleInput = () => {
+    if (!gameOver) bird?.jump();
+    if (!gameStart) gameStart = true;
+    if (gameOver &&
+      p5.mouseX > CANVAS_WIDTH / 2 - 85 &&
+      p5.mouseX < CANVAS_WIDTH / 2 + 75 &&
+      p5.mouseY > CANVAS_HEIGHT / 2 + 100 &&
+      p5.mouseY < CANVAS_HEIGHT / 2 + 160) resetGame();
+  };
 
   p5.setup = () => {
     p5.createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT); p5.frameRate(60);
-    injectStyles(); createTopBarUI(); toggleWeb3UI(); autoConnectWallet(); resetGame();
-    p5.canvas.addEventListener('touchstart', e => { e.preventDefault(); handleInput(); }, { passive:false });
+    injectStyles(); createTopBarUI(); toggleWeb3UI();
+    autoConnectWallet();
+    resetGame();
+    p5.canvas.addEventListener('touchstart', e => { e.preventDefault(); handleInput(); }, { passive: false });
     p5.canvas.addEventListener('mousedown', e => { handleInput(); });
   };
 
   p5.draw = () => {
-    if (backgroundImg) p5.image(backgroundImg,0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
-    if (gameStart && !gameOver) { pipe.move(Math.floor(score/10)); pipe.draw(); bird.update(); bird.draw(); floor.update(); floor.draw(); gameOver = pipe.checkCrash(bird) || bird.isDead(); if (gameOver) { playerScore += score; savePlayerScore(); toggleWeb3UI(); dieAudio.play(); } if(pipe.getScore(bird)){ score++; pointAudio.play(); } } 
-    else { pipe.draw(); bird.draw(); floor.update(); floor.draw(); }
+    if (backgroundImg) p5.image(backgroundImg, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    const level = Math.floor(score / 10);
+    if (gameStart && !gameOver) {
+      pipe.move(level); pipe.draw(); bird.update(); bird.draw(); floor.update(); floor.draw();
+      gameOver = pipe.checkCrash(bird) || bird.isDead();
+      if (gameOver) {
+        dieAudio.currentTime = 0; dieAudio.play();
+        playerScore += score; // score ditambah ke total player
+        savePlayerScore(); // Simpan score ke localStorage
+        toggleWeb3UI();
+      }
+      if (pipe.getScore(bird)) { score++; pointAudio.currentTime = 0; pointAudio.play(); }
+    } else {
+      pipe.draw(); bird.draw(); floor.draw();
+      if (gameOver) bird.update(); else floor.update();
+    }
+    if (!gameStart) gameText.startText();
+    if (gameOver) {
+      if (score > bestScore) { bestScore = score; storage.setStorageData({ bestScore: score }); }
+      gameText.gameOverText(score, bestScore, level); gameButton.resetButton();
+    } else gameText.scoreText(score, level);
   };
 
-  p5.keyPressed = e => { if(e.key===' '){ if(!gameOver) bird?.jump(); if(!gameStart) gameStart=true; } if(e.key==='r'&&gameOver) resetGame(); };
+  p5.keyPressed = e => {
+    if (e.key === ' ') { if (!gameOver) bird?.jump(); if (!gameStart) gameStart = true; }
+    if (e.key === 'r' && gameOver) resetGame();
+  };
 };
 
 new P5(sketch, 'Game');
