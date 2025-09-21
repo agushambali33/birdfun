@@ -32,7 +32,8 @@ const VOUCHER_ENDPOINT = 'https://birdfunbackend.vercel.app/api/sign';
 const CONTRACT_ABI = [
   "function claimReward(uint256 amount,uint256 nonce,uint256 expiry,bytes signature) external",
   "function getPoolBalance() external view returns (uint256)",
-  "function usedNonces(address player, uint256 nonce) external view returns (bool)"
+  "function lastNonce(address player) external view returns (uint256)",
+  "function lastClaim(address player) external view returns (uint256)"
 ];
 
 /* ===== PROVIDERS & CONTRACTS ===== */
@@ -76,6 +77,23 @@ const showToast = (msg, type = 'info') => {
   }, 2400);
 };
 
+/* ===== LOCAL STORAGE FOR PERSISTENCE ===== */
+function savePlayerScore() {
+  if (playerAddress) {
+    localStorage.setItem(`playerScore_${playerAddress.toLowerCase()}`, playerScore.toString());
+    logDebug(`Saved score for ${playerAddress}: ${playerScore}`);
+  }
+}
+
+function loadPlayerScore() {
+  if (playerAddress) {
+    const saved = localStorage.getItem(`playerScore_${playerAddress.toLowerCase()}`);
+    playerScore = saved ? parseInt(saved, 10) : 0;
+    logDebug(`Loaded score for ${playerAddress}: ${playerScore}`);
+    toggleWeb3UI();
+  }
+}
+
 /* ===== WEB3 ===== */
 async function connectWallet(silent = false) {
   if (!window.ethereum) {
@@ -107,12 +125,13 @@ async function connectWallet(silent = false) {
     provider = new ethers.providers.Web3Provider(window.ethereum, 'any');
     signer = provider.getSigner();
     contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-    playerAddress = accounts[0];
+    playerAddress = accounts[0].toLowerCase(); // Normalize to lowercase
     isWalletConnected = !!playerAddress;
 
     window.ethereum.on('accountsChanged', autoConnectWallet);
     window.ethereum.on('chainChanged', autoConnectWallet);
 
+    loadPlayerScore(); // Load persisted score after connect
     toggleWeb3UI();
     showToast('Wallet connected', 'success');
     logDebug(`Wallet connected: ${playerAddress}`);
@@ -134,14 +153,32 @@ async function ensureWalletConnected() {
 }
 
 async function getNextNonce() {
-  let nonce = 1;
   try {
-    while (await contractReadOnly.usedNonces(playerAddress, nonce)) nonce++;
+    const last = await contractReadOnly.lastNonce(playerAddress);
+    const next = last.toNumber() + 1;
+    logDebug(`Next nonce for ${playerAddress}: ${next}`);
+    return next;
   } catch (err) {
     logDebug(`AutoNonce error: ${err.message}`);
+    return 1; // Fallback jika error
   }
-  logDebug(`Next nonce for ${playerAddress}: ${nonce}`);
-  return nonce;
+}
+
+async function checkCooldown() {
+  try {
+    const lastClaimTime = await contractReadOnly.lastClaim(playerAddress);
+    const cooldownEnd = lastClaimTime.toNumber() + 30; // 30 detik cooldown dari kontrak
+    const now = Math.floor(Date.now() / 1000);
+    if (now < cooldownEnd) {
+      const remaining = cooldownEnd - now;
+      showToast(`Cooldown active! Wait ${remaining} seconds.`, 'warning');
+      return false;
+    }
+    return true;
+  } catch (err) {
+    logDebug(`Cooldown check error: ${err.message}`);
+    return true; // Assume ok jika error
+  }
 }
 
 async function claimReward() {
@@ -152,6 +189,9 @@ async function claimReward() {
   try {
     const connected = await ensureWalletConnected();
     if (!connected) return;
+
+    const canClaim = await checkCooldown();
+    if (!canClaim) return;
 
     showToast('Fetching voucher...', 'loading');
     const nonce = await getNextNonce();
@@ -178,11 +218,20 @@ async function claimReward() {
     logDebug(`TX confirmed in block ${receipt.blockNumber}`);
 
     playerScore = 0;
+    savePlayerScore(); // Save reset score
     toggleWeb3UI();
     showToast('Reward claimed!', 'success');
   } catch (err) {
     console.error(err);
-    showToast(err?.message || 'Claim failed', 'error');
+    let errMsg = err?.message || 'Claim failed';
+    if (errMsg.includes('NonceTooLow')) {
+      errMsg = 'Invalid nonce - try again';
+    } else if (errMsg.includes('CooldownActive')) {
+      errMsg = 'Cooldown active - wait a bit';
+    } else if (errMsg.includes('ExpiredVoucher')) {
+      errMsg = 'Voucher expired - retry';
+    }
+    showToast(errMsg, 'error');
   }
 }
 
@@ -250,7 +299,7 @@ const sketch = p5 => {
 
   p5.draw = () => {
     if (backgroundImg) p5.image(backgroundImg,0,0,CANVAS_WIDTH,CANVAS_HEIGHT);
-    if (gameStart && !gameOver) { pipe.move(Math.floor(score/10)); pipe.draw(); bird.update(); bird.draw(); floor.update(); floor.draw(); gameOver = pipe.checkCrash(bird) || bird.isDead(); if (gameOver) { playerScore += score; toggleWeb3UI(); dieAudio.play(); } if(pipe.getScore(bird)){ score++; pointAudio.play(); } } 
+    if (gameStart && !gameOver) { pipe.move(Math.floor(score/10)); pipe.draw(); bird.update(); bird.draw(); floor.update(); floor.draw(); gameOver = pipe.checkCrash(bird) || bird.isDead(); if (gameOver) { playerScore += score; savePlayerScore(); toggleWeb3UI(); dieAudio.play(); } if(pipe.getScore(bird)){ score++; pointAudio.play(); } } 
     else { pipe.draw(); bird.draw(); floor.update(); floor.draw(); }
   };
 
