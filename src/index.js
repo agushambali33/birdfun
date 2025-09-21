@@ -1,4 +1,4 @@
-// index.js (FULL FINAL V4 tanpa Leaderboard, Twitter Follow @agushambali33 dengan Konfirmasi)
+// index.js (FULL FINAL V4 tanpa Leaderboard, Twitter Follow @agushambali33 dengan Custom Dialog, Mobile Fix)
 import './main.scss';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './game/constants';
 import Pipe from './game/pipe';
@@ -99,32 +99,48 @@ function loadPlayerScore() {
 }
 
 /* ====== TWITTER FOLLOW CHECK ====== */
-function checkTwitterFollow() {
+function checkTwitterFollow(callback) {
   if (playerAddress) {
     const followed = localStorage.getItem(`twitterFollowed_${playerAddress.toLowerCase()}`);
     if (followed) {
       logDebug(`Twitter already followed for ${playerAddress}`);
-      return true;
+      callback(true);
+      return;
     }
-    const hasFollowed = confirm(`Have you followed ${TWITTER_HANDLE} on Twitter? Click OK if yes, or Cancel to follow now.`);
-    if (hasFollowed) {
+
+    // Create custom dialog
+    const dialog = document.createElement('div');
+    dialog.className = 'twitter-dialog';
+    dialog.innerHTML = `
+      <div class="twitter-dialog-content">
+        <h2>Follow Us!</h2>
+        <p>Have you followed <a href="https://x.com/${TWITTER_HANDLE.slice(1)}" target="_blank">${TWITTER_HANDLE}</a> on Twitter?</p>
+        <div class="twitter-dialog-buttons">
+          <button id="twitter-yes">Yes</button>
+          <button id="twitter-no">No</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(dialog);
+
+    document.getElementById('twitter-yes').onclick = () => {
       localStorage.setItem(`twitterFollowed_${playerAddress.toLowerCase()}`, 'true');
       logDebug(`Twitter follow confirmed for ${playerAddress}`);
-      return true;
-    } else {
-      const confirmed = confirm(`Please follow ${TWITTER_HANDLE} on Twitter to claim rewards! Click OK after following.`);
-      if (confirmed) {
-        window.open(`https://x.com/${TWITTER_HANDLE.slice(1)}`, '_blank');
-        localStorage.setItem(`twitterFollowed_${playerAddress.toLowerCase()}`, 'true');
-        logDebug(`Twitter follow confirmed for ${playerAddress} after opening Twitter`);
-        return true;
-      }
-      showToast(`Follow ${TWITTER_HANDLE} to claim!`, 'warning');
-      return false;
-    }
+      document.body.removeChild(dialog);
+      callback(true);
+    };
+
+    document.getElementById('twitter-no').onclick = () => {
+      window.open(`https://x.com/${TWITTER_HANDLE.slice(1)}`, '_blank');
+      localStorage.setItem(`twitterFollowed_${playerAddress.toLowerCase()}`, 'true');
+      logDebug(`Twitter follow triggered for ${playerAddress}`);
+      document.body.removeChild(dialog);
+      callback(true);
+    };
+  } else {
+    showToast('Connect wallet first!', 'error');
+    callback(false);
   }
-  showToast('Connect wallet first!', 'error');
-  return false;
 }
 
 /* ====== POOL BALANCE ====== */
@@ -145,7 +161,7 @@ async function checkPoolBalance() {
 /* ====== WEB3 ACTIONS ====== */
 async function connectWallet(silent = false) {
   if (typeof window.ethereum === 'undefined') {
-    if (!silent) showToast('Please install MetaMask!', 'error');
+    if (!silent) showToast('Please install MetaMask or OKX Wallet!', 'error');
     return false;
   }
   try {
@@ -287,55 +303,57 @@ async function redeemPoints() {
     showToast('No points to claim', 'warning');
     return;
   }
-  if (!checkTwitterFollow()) return;
-  try {
-    const connected = await ensureWalletConnected();
-    if (!connected) return;
-
-    const canClaim = await checkCooldown();
+  checkTwitterFollow(async (canClaim) => {
     if (!canClaim) return;
+    try {
+      const connected = await ensureWalletConnected();
+      if (!connected) return;
 
-    showToast('Fetching token voucher...', 'loading');
-    const nonce = await getNextNonce();
-    const response = await fetch(
-      `${VOUCHER_ENDPOINT}?player=${playerAddress}&amount=${playerScore}&nonce=${nonce}&contractAddress=${CONTRACT_ADDRESS}`
-    );
-    const voucher = await response.json();
-    logDebug(`Voucher: amount=${voucher.amount}, hbirdAmount=${voucher.hbirdAmount}, amountWei=${voucher.amountWei}`);
+      const canClaimCooldown = await checkCooldown();
+      if (!canClaimCooldown) return;
 
-    if (!voucher.success) {
-      showToast('Failed to get token voucher', 'error');
-      return;
+      showToast('Fetching token voucher...', 'loading');
+      const nonce = await getNextNonce();
+      const response = await fetch(
+        `${VOUCHER_ENDPOINT}?player=${playerAddress}&amount=${playerScore}&nonce=${nonce}&contractAddress=${CONTRACT_ADDRESS}`
+      );
+      const voucher = await response.json();
+      logDebug(`Voucher: amount=${voucher.amount}, hbirdAmount=${voucher.hbirdAmount}, amountWei=${voucher.amountWei}`);
+
+      if (!voucher.success) {
+        showToast('Failed to get token voucher', 'error');
+        return;
+      }
+
+      showToast('Claiming token...', 'loading');
+      const tx = await contract.claimReward(
+        voucher.amountWei,
+        voucher.nonce,
+        voucher.expiry,
+        voucher.signature,
+        { gasLimit: 500000 }
+      );
+      logDebug(`TX sent: ${tx.hash}`);
+      const receipt = await tx.wait();
+      logDebug(`TX confirmed in block ${receipt.blockNumber}`);
+
+      playerScore = 0;
+      savePlayerScore();
+      toggleWeb3UI();
+      showToast(`Token claimed! Check: https://explorer.helioschainlabs.org/tx/${tx.hash}`, 'success');
+    } catch (err) {
+      console.error('redeemPoints error', err);
+      let errMsg = err?.message || 'Claim failed';
+      if (errMsg.includes('NonceTooLow')) {
+        errMsg = 'Invalid nonce - try again';
+      } else if (errMsg.includes('CooldownActive')) {
+        errMsg = 'Cooldown active - wait a bit';
+      } else if (errMsg.includes('ExpiredVoucher')) {
+        errMsg = 'Voucher expired - retry';
+      }
+      showToast(errMsg, 'error');
     }
-
-    showToast('Claiming token...', 'loading');
-    const tx = await contract.claimReward(
-      voucher.amountWei,
-      voucher.nonce,
-      voucher.expiry,
-      voucher.signature,
-      { gasLimit: 500000 }
-    );
-    logDebug(`TX sent: ${tx.hash}`);
-    const receipt = await tx.wait();
-    logDebug(`TX confirmed in block ${receipt.blockNumber}`);
-
-    playerScore = 0;
-    savePlayerScore();
-    toggleWeb3UI();
-    showToast(`Token claimed! Check: https://explorer.helioschainlabs.org/tx/${tx.hash}`, 'success');
-  } catch (err) {
-    console.error('redeemPoints error', err);
-    let errMsg = err?.message || 'Claim failed';
-    if (errMsg.includes('NonceTooLow')) {
-      errMsg = 'Invalid nonce - try again';
-    } else if (errMsg.includes('CooldownActive')) {
-      errMsg = 'Cooldown active - wait a bit';
-    } else if (errMsg.includes('ExpiredVoucher')) {
-      errMsg = 'Voucher expired - retry';
-    }
-    showToast(errMsg, 'error');
-  }
+  });
 }
 
 /* ====== UI ====== */
@@ -356,32 +374,72 @@ function injectStyles() {
     .g-toggle.connected { background: linear-gradient(135deg, #32CD32, #228B22); }
     #web3-info {
       position: fixed; top: 5px; right: 5px; display: flex; flex-direction: column;
-      gap: 4px; align-items: flex-end; z-index: 9999; max-width: 180px;
+      gap: 4px; align-items: flex-end; z-index: 9999; max-width: 160px;
     }
     .g-badge {
       padding: 4px 6px; border-radius: 8px; background: rgba(0, 0, 0, 0.7); color: #fff;
-      font-size: 8px; font-weight: 600; font-family: 'Press Start 2P', Arial, sans-serif;
-      line-height: 1.2;
+      font-size: 7px; font-weight: 600; font-family: 'Press Start 2P', Arial, sans-serif;
+      line-height: 1.4; text-align: right; white-space: nowrap;
     }
     .g-badge.info {
-      background: linear-gradient(135deg, #4682B4, #2F4F4F); opacity: 0.8;
-      display: flex; flex-direction: column; gap: 2px; padding: 6px 8px;
+      background: linear-gradient(135deg, #4682B4, #2F4F4F); opacity: 0.9;
+      display: flex; flex-direction: column; gap: 3px; padding: 6px 8px;
     }
     #claim-btn {
-      height: 24px; padding: 0 8px; border-radius: 10px; border: 2px solid #fff;
+      height: 22px; padding: 0 8px; border-radius: 10px; border: 2px solid #fff;
       background: linear-gradient(135deg, #FFD54F, #FF8A00); color: #000; font-weight: 700;
-      font-size: 8px; font-family: 'Press Start 2P', Arial, sans-serif; cursor: pointer;
+      font-size: 7px; font-family: 'Press Start 2P', Arial, sans-serif; cursor: pointer;
     }
     #claim-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
     .game-toast {
       position: fixed; top: 80px; right: 10px; background: rgba(0, 0, 0, 0.9); color: #fff;
       padding: 6px 10px; border-radius: 6px; z-index: 10000; font-family: 'Press Start 2P';
-      font-size: 8px; max-width: 180px; line-height: 1.2;
+      font-size: 7px; max-width: 160px; line-height: 1.2;
+    }
+    .twitter-dialog {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8);
+      display: flex; justify-content: center; align-items: center; z-index: 10001;
+    }
+    .twitter-dialog-content {
+      background: #1e1e1e; border-radius: 12px; padding: 15px; max-width: 280px; text-align: center;
+      font-family: 'Press Start 2P', Arial, sans-serif; color: #fff;
+    }
+    .twitter-dialog-content h2 {
+      font-size: 10px; margin-bottom: 10px; color: #FFD54F;
+    }
+    .twitter-dialog-content p {
+      font-size: 8px; margin-bottom: 15px; line-height: 1.3;
+    }
+    .twitter-dialog-content a {
+      color: #00CED1; text-decoration: none;
+    }
+    .twitter-dialog-content a:hover {
+      text-decoration: underline;
+    }
+    .twitter-dialog-buttons {
+      display: flex; gap: 10px; justify-content: center;
+    }
+    .twitter-dialog-buttons button {
+      padding: 6px 12px; border-radius: 8px; border: 2px solid #fff;
+      font-size: 8px; font-family: 'Press Start 2P', Arial, sans-serif; cursor: pointer;
+    }
+    #twitter-yes {
+      background: linear-gradient(135deg, #32CD32, #228B22); color: #fff;
+    }
+    #twitter-no {
+      background: linear-gradient(135deg, #FF4500, #B22222); color: #fff;
     }
     @media (max-width: 600px) {
-      #web3-info { max-width: 150px; }
-      .g-badge, #claim-btn { font-size: 7px; }
-      .g-toggle { font-size: 7px; height: 20px; }
+      #web3-info { max-width: 140px; }
+      .g-badge, #claim-btn, .game-toast { font-size: 6px; }
+      .g-toggle { font-size: 6px; height: 20px; }
+      .twitter-dialog-content { max-width: 240px; }
+      .twitter-dialog-content h2 { font-size: 9px; }
+      .twitter-dialog-content p { font-size: 7px; }
+      .twitter-dialog-buttons button { font-size: 7px; padding: 5px 10px; }
+    }
+    @media (min-width: 601px) {
+      canvas { max-width: 100%; max-height: 80vh; aspect-ratio: ${CANVAS_WIDTH} / ${CANVAS_HEIGHT}; }
     }
   `;
   document.head.appendChild(s);
@@ -473,8 +531,10 @@ const sketch = p5 => {
   };
 
   p5.setup = () => {
-    p5.createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+    const canvas = p5.createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
     p5.frameRate(60);
+    canvas.elt.style.display = 'block';
+    canvas.elt.style.margin = '0 auto';
     injectStyles();
     createTopBarUI();
     toggleWeb3UI();
